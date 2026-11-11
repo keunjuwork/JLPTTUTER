@@ -8,6 +8,7 @@ import {
   Lock,
   Map,
   Medal,
+  PlayCircle,
   Printer,
   RefreshCw,
   Sparkles
@@ -16,6 +17,7 @@ import { ADVENTURE_STAGES, LEVEL_EXAM_INFO } from '../data/adventureRoadmapData'
 import { BADGE_DEFS } from '../data/cultureAndBadgesData';
 import {
   EXP_PER_LEVEL,
+  formatPraiseText,
   getDueSrsChars,
   getMissionCountSummary,
   getNextJlptDDay,
@@ -32,6 +34,8 @@ interface HomeViewProps {
   onChangeLevelScope: (level: JlptLevel, subLevel: SubDifficulty) => void;
   onToggleRoutine: (routine: 'routineVocab' | 'routineGrammar' | 'routineReading') => void;
   onAcknowledgePraise: (praiseId: string, bonusExp: number) => void;
+  onTogglePlanTask: (taskKey: string) => void;
+  onResumeLastLocation: () => void;
   onNotify: (msg: string, type?: 'info' | 'success' | 'warning') => void;
 }
 
@@ -45,6 +49,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onChangeLevelScope,
   onToggleRoutine,
   onAcknowledgePraise,
+  onTogglePlanTask,
+  onResumeLastLocation,
   onNotify
 }) => {
   const [modalMode, setModalMode] = React.useState<'exam' | 'roadmap' | null>(null);
@@ -135,6 +141,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <BookOpen className="w-3.5 h-3.5 text-[#FF6B57]" />
             <span>시험 정보·4주 플랜</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigateTab('practice')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#2B2340] hover:bg-[#3f345d] text-xs font-bold text-white cursor-pointer transition-colors"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-[#FFD166]" />
+            <span>실전 (독해·청해·모의고사)</span>
+          </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 text-xs font-bold text-[#2B2340]/75 tabular-nums">
@@ -161,9 +176,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
             <div>
               <div className="text-xs font-extrabold text-[#D97706]">
-                {unreadPraise.senderName}의 응원 메시지
+                {state.studentName}에게 온 {unreadPraise.senderName}의 응원 메시지
               </div>
-              <div className="text-sm font-bold text-[#2B2340]">{unreadPraise.text}</div>
+              <div className="text-sm font-bold text-[#2B2340]">
+                {formatPraiseText(unreadPraise.text, state.studentName)}
+              </div>
             </div>
           </div>
           <button
@@ -172,6 +189,33 @@ export const HomeView: React.FC<HomeViewProps> = ({
             className="px-4 py-2 rounded-full bg-[#FF6B57] hover:bg-[#f25843] text-white text-xs font-bold cursor-pointer whitespace-nowrap"
           >
             {unreadPraise.bonusExp > 0 ? `확인 +${unreadPraise.bonusExp} EXP 받기` : '확인했어요!'}
+          </button>
+        </div>
+      )}
+
+      {/* Resume Where Left Off Banner */}
+      {state.lastStudyLocation && (
+        <div className="bg-white border-[3px] border-[#4CC38A] rounded-[22px] px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-[#E9F9F1] flex items-center justify-center shrink-0 text-[#1E6E4A]">
+              <PlayCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-[11px] font-extrabold text-[#1E6E4A]">
+                어제 하던 곳 이어하기
+              </div>
+              <div className="text-sm font-extrabold text-[#2B2340] font-jp">
+                {state.lastStudyLocation.label}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onResumeLastLocation}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#4CC38A] hover:bg-[#3eb37b] text-white text-xs font-extrabold cursor-pointer whitespace-nowrap"
+          >
+            <span>바로 이어하기</span>
+            <ChevronRight className="w-4 h-4" />
           </button>
         </div>
       )}
@@ -350,19 +394,19 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 </div>
               </button>
 
-              {/* Card 3: Locked Kanji Game */}
+              {/* Card 3: Unlocked Pair Match Game */}
               <button
                 type="button"
-                onClick={() =>
-                  onNotify('「한자 짝맞추기」는 N5 월드(14단계)에 도착하면 열려요!', 'info')
-                }
-                className="text-left rounded-[22px] bg-[#9E97AE] text-white p-5 hover:bg-[#9088A1] transition-colors cursor-pointer"
+                onClick={() => onNavigateTab('game')}
+                className="text-left rounded-[22px] bg-gradient-to-br from-[#4CC38A] to-[#2EA870] text-white p-5 hover:scale-[1.015] transition-transform cursor-pointer shadow-sm"
               >
-                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-                  <Lock className="w-5 h-5 text-[#FFD166]" />
+                <div className="text-3xl font-extrabold leading-none">🃏</div>
+                <div className="mt-4 text-base font-extrabold">카드 짝맞추기</div>
+                <div className="mt-1 text-xs font-medium text-white/90 tabular-nums">
+                  {state.gameRecords.pairMatchBest > 0
+                    ? `최고 ${state.gameRecords.pairMatchBest.toLocaleString()}점 · 가나/한자`
+                    : '가나 · 한자 짝맞추기'}
                 </div>
-                <div className="mt-4 text-base font-extrabold">한자 짝맞추기</div>
-                <div className="mt-1 text-xs font-medium text-white/90">N5 월드에서 열려요</div>
               </button>
             </div>
           </section>
@@ -556,6 +600,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
               >
                 받아쓰기 시험지
               </button>
+              <button
+                type="button"
+                onClick={() => onNavigateTab('print', { printSubTab: 'wrongNotes' })}
+                className="px-3.5 py-2 rounded-2xl border-2 border-[#FFE1C2] bg-[#FFFDF9] hover:bg-[#FFF1DF] text-xs font-bold text-[#2B2340] cursor-pointer transition-colors"
+              >
+                오답 프린트
+              </button>
             </div>
           </div>
 
@@ -617,6 +668,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           onClose={() => setModalMode(null)}
           onSelectStage={onSelectStage}
           onChangeLevel={(lvl) => onChangeLevelScope(lvl, state.subLevel)}
+          onTogglePlanTask={onTogglePlanTask}
         />
       )}
     </div>

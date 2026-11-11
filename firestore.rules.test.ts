@@ -127,12 +127,12 @@ export const DIRTY_DOZEN_CASES: DirtyDozenCase[] = [
   },
   {
     id: 12,
-    name: 'Student Tampering with Admin Mission Settings',
+    name: 'Student Tampering with Admin Mission Settings / Shop Catalog',
     operation: 'update',
     path: '/students/userA',
     auth: { uid: 'userA', email: 'a@example.com', email_verified: true },
-    payload: { missionSettings: { dailyNewChars: 0 } },
+    payload: { missionSettings: { dailyNewChars: 0 }, shopCatalog: [] },
     expected: 'PERMISSION_DENIED',
-    enforcedBy: 'Tier 2 affectedKeys excludes missionSettings & praiseMessages'
+    enforcedBy: 'Tier 2 affectedKeys excludes missionSettings, praiseMessages & shopCatalog'
   }
 ];

@@ -9,6 +9,7 @@ interface ExamInfoAndRoadmapModalProps {
   onClose: () => void;
   onSelectStage: (stage: AdventureStage) => void;
   onChangeLevel: (level: JlptLevel) => void;
+  onTogglePlanTask?: (taskKey: string) => void;
 }
 
 const LEVELS: JlptLevel[] = ['STAGE0', 'N5', 'N4', 'N3', 'N2', 'N1'];
@@ -18,11 +19,13 @@ export const ExamInfoAndRoadmapModal: React.FC<ExamInfoAndRoadmapModalProps> = (
   state,
   onClose,
   onSelectStage,
-  onChangeLevel
+  onChangeLevel,
+  onTogglePlanTask
 }) => {
   const [selectedInfoLevel, setSelectedInfoLevel] = React.useState<JlptLevel>(state.targetLevel);
   const info = LEVEL_EXAM_INFO[selectedInfoLevel];
   const fourWeekPlan = FOUR_WEEK_PLANS.find((p) => p.level === selectedInfoLevel);
+  const planChecks = state.fourWeekPlanChecks || [];
 
   return (
     <div
@@ -152,18 +155,37 @@ export const ExamInfoAndRoadmapModal: React.FC<ExamInfoAndRoadmapModalProps> = (
                 </div>
               </div>
 
-              {/* 4-Week Focus Plan Preview (20 weeks / 60 tasks dataset) */}
+              {/* 4-Week Focus Plan Preview (20 weeks / 60 tasks dataset with interactive checks) */}
               {fourWeekPlan && (
                 <div className="bg-white rounded-[24px] border-[3px] border-[#FFE1C2] p-6 space-y-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-5 h-5 text-[#FF6B57]" />
-                      <h4 className="text-base font-extrabold text-[#2B2340]">
-                        {fourWeekPlan.level} 시험 전 4주 집중 플랜 (총 12과제)
-                      </h4>
-                    </div>
-                    <span className="text-xs font-bold text-[#2B2340]/60">모험 지도 마지막 관문</span>
-                  </div>
+                  {(() => {
+                    const completedForLevel = fourWeekPlan.weeks.reduce(
+                      (acc, wk) =>
+                        acc +
+                        wk.tasks.filter((_, idx) =>
+                          planChecks.includes(`${fourWeekPlan.level}_w${wk.week}_${idx}`)
+                        ).length,
+                      0
+                    );
+                    return (
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-5 h-5 text-[#FF6B57]" />
+                          <h4 className="text-base font-extrabold text-[#2B2340]">
+                            {fourWeekPlan.level} 시험 전 4주 집중 플랜
+                          </h4>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-3 py-1 rounded-full bg-[#4CC38A]/15 text-[#228558] text-xs font-extrabold tabular-nums">
+                            체크 {completedForLevel} / 12 완료
+                          </span>
+                          <span className="text-xs font-bold text-[#2B2340]/60">
+                            모험 지도 마지막 관문 (시험 D-28 집중)
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   <div className="grid sm:grid-cols-2 gap-4">
                     {fourWeekPlan.weeks.map((wk) => (
@@ -175,12 +197,32 @@ export const ExamInfoAndRoadmapModal: React.FC<ExamInfoAndRoadmapModalProps> = (
                           💡 {wk.tip}
                         </p>
                         <ul className="space-y-1.5 text-xs text-[#2B2340]">
-                          {wk.tasks.map((task) => (
-                            <li key={task} className="flex items-start gap-2">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-[#4CC38A] shrink-0 mt-0.5" />
-                              <span>{task}</span>
-                            </li>
-                          ))}
+                          {wk.tasks.map((task, idx) => {
+                            const taskKey = `${fourWeekPlan.level}_w${wk.week}_${idx}`;
+                            const checked = planChecks.includes(taskKey);
+                            return (
+                              <li key={taskKey}>
+                                <button
+                                  type="button"
+                                  onClick={() => onTogglePlanTask?.(taskKey)}
+                                  className={`w-full text-left flex items-start gap-2 rounded-lg p-1.5 transition-colors cursor-pointer ${
+                                    checked
+                                      ? 'bg-[#4CC38A]/12 text-[#1f7d52] font-bold'
+                                      : 'hover:bg-[#FFF7EC]'
+                                  }`}
+                                >
+                                  <CheckCircle2
+                                    className={`w-4 h-4 shrink-0 mt-0.5 ${
+                                      checked ? 'text-[#4CC38A]' : 'text-[#D9CEE6]'
+                                    }`}
+                                  />
+                                  <span className={checked ? 'line-through opacity-85' : ''}>
+                                    {task}
+                                  </span>
+                                </button>
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     ))}

@@ -1,12 +1,14 @@
 import React from 'react';
-import { Award, Download, Lock, Medal, Sparkles, Upload, X } from 'lucide-react';
+import { Award, Download, Lock, Medal, Pencil, Sparkles, Type, Upload, X } from 'lucide-react';
 import { BADGE_DEFS, CULTURE_CARDS } from '../data/cultureAndBadgesData';
 import { HIRAGANA_BASIC, KATAKANA_BASIC } from '../data/kanaData';
-import { CultureCard, MainTab, StudentState, StudySubTab } from '../types';
+import { CultureCard, FontSizeScale, MainTab, StudentState, StudySubTab } from '../types';
 
 interface RecordsViewProps {
   state: StudentState;
   onNavigateFromBadge: (tab: MainTab, studySubTab?: StudySubTab) => void;
+  onOpenProfileModal: () => void;
+  onChangeFontSizeScale: (scale: FontSizeScale) => void;
   onExportJson: () => void;
   onImportJson: (raw: string) => void;
 }
@@ -14,6 +16,8 @@ interface RecordsViewProps {
 export const RecordsView: React.FC<RecordsViewProps> = ({
   state,
   onNavigateFromBadge,
+  onOpenProfileModal,
+  onChangeFontSizeScale,
   onExportJson,
   onImportJson
 }) => {
@@ -40,16 +44,36 @@ export const RecordsView: React.FC<RecordsViewProps> = ({
     <div className="max-w-[1240px] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
       {/* Summary & JSON Backup Bar */}
       <div className="bg-white border-[3px] border-[#FFE1C2] rounded-[26px] p-5 sm:p-6 flex flex-wrap items-center justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-extrabold text-[#2B2340]">{state.studentName}의 모험 기록</h1>
-          <div className="flex flex-wrap items-center gap-3 text-xs font-bold text-[#2B2340]/70 tabular-nums">
-            <span>Lv.{state.level} (총 {state.exp.toLocaleString()} EXP)</span>
-            <span aria-hidden="true">·</span>
-            <span>히라가나 {learnedHira}/46자</span>
-            <span aria-hidden="true">·</span>
-            <span>가타카나 {learnedKata}/46자</span>
-            <span aria-hidden="true">·</span>
-            <span>낙하 게임 최고 {state.gameRecords.kanaDropBest.toLocaleString()}점</span>
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={onOpenProfileModal}
+            title="프로필 이모지 변경"
+            className="w-14 h-14 rounded-full bg-[#FFE9A8] border-[3px] border-[#FFD166] flex items-center justify-center text-3xl leading-none shrink-0 cursor-pointer hover:scale-105 transition-transform"
+          >
+            {state.profileEmoji || '🌸'}
+          </button>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-2xl font-extrabold text-[#2B2340]">{state.studentName}의 모험 기록</h1>
+              <button
+                type="button"
+                onClick={onOpenProfileModal}
+                className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-[#FFF7EC] border-2 border-[#FFE1C2] hover:border-[#FF6B57] text-xs font-extrabold text-[#2B2340] cursor-pointer transition-colors"
+              >
+                <Pencil className="w-3 h-3 text-[#FF6B57]" />
+                <span>이름 · 이모지 변경</span>
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2.5 text-xs font-bold text-[#2B2340]/70 tabular-nums">
+              <span>Lv.{state.level} (총 {state.exp.toLocaleString()} EXP · 🪙 {state.coins.toLocaleString()} C)</span>
+              <span aria-hidden="true">·</span>
+              <span>가나 {learnedHira + learnedKata}/92자</span>
+              <span aria-hidden="true">·</span>
+              <span>단어 {state.learnedVocab.length} · 한자 {state.learnedKanji.length} · 문법 {state.learnedGrammar.length}</span>
+              <span aria-hidden="true">·</span>
+              <span>모의고사 {state.mockExamHistory.length}회</span>
+            </div>
           </div>
         </div>
 
@@ -79,6 +103,44 @@ export const RecordsView: React.FC<RecordsViewProps> = ({
           />
         </div>
       </div>
+
+      {/* Display Accessibility: 3-Step Font Size Scale */}
+      <section className="bg-white border-[3px] border-[#FFE1C2] rounded-[24px] p-5 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-[#FFF7EC] border-2 border-[#FFE1C2] flex items-center justify-center text-[#FF6B57] shrink-0">
+            <Type className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-sm font-extrabold text-[#2B2340]">
+              화면 · 일본어 카드 글자 크기 (3단계)
+            </div>
+            <div className="text-xs font-medium text-[#2B2340]/65">
+              본문과 학습실 일본어 큰 글자 카드에 함께 적용돼요 ·{' '}
+              <span className="font-jp font-bold text-[#2B2340]">あいうえお</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {[
+            { id: 'normal' as const, label: '보통' },
+            { id: 'large' as const, label: '크게' },
+            { id: 'xlarge' as const, label: '아주 크게' }
+          ].map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => onChangeFontSizeScale(opt.id)}
+              className={`px-4 py-2 rounded-full text-xs font-extrabold border-2 transition-colors cursor-pointer ${
+                (state.fontSizeScale || 'normal') === opt.id
+                  ? 'bg-[#2B2340] border-[#2B2340] text-white'
+                  : 'bg-[#FFF7EC] border-[#FFE1C2] text-[#2B2340] hover:bg-[#FFEBD2]'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </section>
 
       {/* 1. Badges Grid (Click navigates to corresponding learning screen!) */}
       <section className="bg-white border-[3px] border-[#FFE1C2] rounded-[26px] p-6 space-y-4">

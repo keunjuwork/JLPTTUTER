@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ARI JLPT 아이콘">
+  <rect width="512" height="512" rx="112" fill="#FF6B57"/>
+  <circle cx="256" cy="256" r="184" fill="#FFF7EC"/>
+  <circle cx="256" cy="256" r="168" fill="none" stroke="#FFE1C2" stroke-width="10"/>
+  <!-- Stylized hiragana あ emblem without mascot characters -->
+  <path d="M 184 188 C 232 184, 286 178, 326 170" fill="none" stroke="#FF6B57" stroke-width="26" stroke-linecap="round"/>
+  <path d="M 244 134 C 242 208, 240 278, 250 356" fill="none" stroke="#2B2340" stroke-width="26" stroke-linecap="round"/>
+  <path d="M 308 214 C 288 294, 232 344, 186 344 C 154 344, 146 312, 168 282 C 194 246, 258 232, 304 252 C 344 270, 344 334, 290 364" fill="none" stroke="#FF6B57" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="348" cy="148" r="18" fill="#FFD166"/>
+</svg>

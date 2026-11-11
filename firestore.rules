@@ -48,8 +48,8 @@ service cloud.firestore {
       return arr is list && arr.size() <= maxLen && (arr.size() == 0 || arr[0] is string);
     }
 
-    function isValidPraiseList(arr) {
-      return arr is list && arr.size() <= 50 && (arr.size() == 0 || arr[0] is map);
+    function isValidMapList(arr, maxLen) {
+      return arr is list && arr.size() <= maxLen && (arr.size() == 0 || arr[0] is map);
     }
 
     // Entity Validators
@@ -93,38 +93,66 @@ service cloud.firestore {
           'createdAt', 'updatedAt'
         ])
         && data.keys().hasOnly([
-          'uid', 'studentName', 'level', 'exp', 'targetLevel', 'subLevel',
+          'uid', 'studentName', 'profileEmoji', 'profileConfigured',
+          'diagnosticCompleted', 'diagnosticResult',
+          'level', 'exp', 'coins', 'gameExpToday', 'gameExpDate',
+          'fontSizeScale', 'lastStudyLocation', 'targetLevel', 'subLevel',
           'streak', 'lastStudyDate', 'streakDates', 'streakProtections',
           'currentStageId', 'unlockedStages', 'completedStages',
-          'learnedKana', 'bookmarkedKana', 'kanaStats', 'srsItems', 'badges',
-          'cultureCards', 'gameRecords', 'studyLogs', 'dailyMissions',
+          'learnedKana', 'bookmarkedKana',
+          'learnedVocab', 'bookmarkedVocab',
+          'learnedKanji', 'bookmarkedKanji',
+          'learnedGrammar', 'fourWeekPlanChecks',
+          'kanaStats', 'srsItems', 'badges',
+          'cultureCards', 'mockExamHistory', 'wrongNoteEntries',
+          'shopCatalog', 'purchasedItems',
+          'gameRecords', 'studyLogs', 'dailyMissions',
           'missionSettings', 'praiseMessages', 'acknowledgedPraiseIds',
           'lastBackupAt', 'startDate', 'createdAt', 'updatedAt'
         ])
         && data.uid is string && data.uid == studentUid && isValidId(data.uid)
         && data.studentName is string && data.studentName.size() >= 1 && data.studentName.size() <= 40
+        && (!('profileEmoji' in data) || (data.profileEmoji is string && data.profileEmoji.size() >= 1 && data.profileEmoji.size() <= 16))
+        && (!('profileConfigured' in data) || data.profileConfigured is bool)
+        && (!('diagnosticCompleted' in data) || data.diagnosticCompleted is bool)
+        && (!('diagnosticResult' in data) || data.diagnosticResult == null || (data.diagnosticResult is map && data.diagnosticResult.size() <= 15))
         && data.level is number && data.level >= 1 && data.level <= 200
         && data.exp is number && data.exp >= 0 && data.exp <= 10000000
+        && (!('coins' in data) || (data.coins is number && data.coins >= 0 && data.coins <= 10000000))
+        && (!('gameExpToday' in data) || (data.gameExpToday is number && data.gameExpToday >= 0 && data.gameExpToday <= 10000))
+        && (!('gameExpDate' in data) || (data.gameExpDate is string && data.gameExpDate.size() <= 20))
+        && (!('fontSizeScale' in data) || data.fontSizeScale in ['normal', 'large', 'xlarge'])
+        && (!('lastStudyLocation' in data) || data.lastStudyLocation == null || (data.lastStudyLocation is map && data.lastStudyLocation.size() <= 15))
         && data.targetLevel in ['STAGE0', 'N5', 'N4', 'N3', 'N2', 'N1']
         && data.subLevel is number && data.subLevel >= 1 && data.subLevel <= 3
         && data.streak is number && data.streak >= 0 && data.streak <= 3650
         && (!('lastStudyDate' in data) || (data.lastStudyDate is string && data.lastStudyDate.size() <= 20))
         && (!('streakDates' in data) || isValidStringList(data.streakDates, 366))
-        && (!('streakProtections' in data) || (data.streakProtections is number && data.streakProtections >= 0 && data.streakProtections <= 10))
+        && (!('streakProtections' in data) || (data.streakProtections is number && data.streakProtections >= 0 && data.streakProtections <= 50))
         && data.currentStageId is string && data.currentStageId.size() >= 1 && data.currentStageId.size() <= 64
         && isValidStringList(data.unlockedStages, 100)
         && isValidStringList(data.completedStages, 100)
         && isValidStringList(data.learnedKana, 300)
         && isValidStringList(data.bookmarkedKana, 300)
+        && (!('learnedVocab' in data) || isValidStringList(data.learnedVocab, 500))
+        && (!('bookmarkedVocab' in data) || isValidStringList(data.bookmarkedVocab, 500))
+        && (!('learnedKanji' in data) || isValidStringList(data.learnedKanji, 500))
+        && (!('bookmarkedKanji' in data) || isValidStringList(data.bookmarkedKanji, 500))
+        && (!('learnedGrammar' in data) || isValidStringList(data.learnedGrammar, 500))
+        && (!('fourWeekPlanChecks' in data) || isValidStringList(data.fourWeekPlanChecks, 100))
         && data.kanaStats is map && data.kanaStats.size() <= 300
         && data.srsItems is map && data.srsItems.size() <= 500
         && isValidStringList(data.badges, 100)
         && isValidStringList(data.cultureCards, 100)
+        && (!('mockExamHistory' in data) || isValidMapList(data.mockExamHistory, 100))
+        && (!('wrongNoteEntries' in data) || isValidMapList(data.wrongNoteEntries, 200))
+        && (!('shopCatalog' in data) || isValidMapList(data.shopCatalog, 50))
+        && (!('purchasedItems' in data) || isValidMapList(data.purchasedItems, 100))
         && data.gameRecords is map && data.gameRecords.size() <= 20
         && data.studyLogs is map && data.studyLogs.size() <= 400
         && data.dailyMissions is map && data.dailyMissions.size() <= 20
         && data.missionSettings is map && data.missionSettings.size() <= 20
-        && isValidPraiseList(data.praiseMessages)
+        && isValidMapList(data.praiseMessages, 50)
         && isValidStringList(data.acknowledgedPraiseIds, 100)
         && (!('lastBackupAt' in data) || (data.lastBackupAt is string && data.lastBackupAt.size() <= 40))
         && (!('startDate' in data) || (data.startDate is string && data.startDate.size() <= 20))
@@ -189,26 +217,42 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
-          // Tier 1: Admin Override (mission settings, praise, level assignment, bonus EXP, full management)
+          // Tier 1: Admin Override (mission settings, praise, shop catalog, level assignment, bonus EXP/coins, operational settings, full management)
           (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
-            'studentName', 'level', 'exp', 'targetLevel', 'subLevel',
+            'studentName', 'profileEmoji', 'profileConfigured',
+            'diagnosticCompleted', 'diagnosticResult',
+            'level', 'exp', 'coins', 'gameExpToday', 'gameExpDate',
+            'fontSizeScale', 'lastStudyLocation', 'targetLevel', 'subLevel',
             'streak', 'lastStudyDate', 'streakDates', 'streakProtections',
             'currentStageId', 'unlockedStages', 'completedStages',
-            'learnedKana', 'bookmarkedKana', 'kanaStats', 'srsItems',
-            'badges', 'cultureCards', 'gameRecords', 'studyLogs',
-            'dailyMissions', 'missionSettings', 'praiseMessages',
-            'acknowledgedPraiseIds', 'lastBackupAt', 'startDate', 'updatedAt'
+            'learnedKana', 'bookmarkedKana',
+            'learnedVocab', 'bookmarkedVocab',
+            'learnedKanji', 'bookmarkedKanji',
+            'learnedGrammar', 'fourWeekPlanChecks',
+            'kanaStats', 'srsItems', 'badges', 'cultureCards',
+            'mockExamHistory', 'wrongNoteEntries',
+            'shopCatalog', 'purchasedItems',
+            'gameRecords', 'studyLogs', 'dailyMissions',
+            'missionSettings', 'praiseMessages', 'acknowledgedPraiseIds',
+            'lastBackupAt', 'startDate', 'updatedAt'
           ]))
           ||
-          // Tier 2: Student Progress Sync (cannot alter admin missionSettings or praiseMessages)
+          // Tier 2: Student Progress Sync (strictly owner-only, cannot alter admin missionSettings, praiseMessages, or shopCatalog)
           (isOwner(studentUid) && incoming().diff(existing()).affectedKeys().hasOnly([
-            'studentName', 'level', 'exp', 'targetLevel', 'subLevel',
+            'studentName', 'profileEmoji', 'profileConfigured',
+            'diagnosticCompleted', 'diagnosticResult',
+            'level', 'exp', 'coins', 'gameExpToday', 'gameExpDate',
+            'fontSizeScale', 'lastStudyLocation', 'targetLevel', 'subLevel',
             'streak', 'lastStudyDate', 'streakDates', 'streakProtections',
             'currentStageId', 'unlockedStages', 'completedStages',
-            'learnedKana', 'bookmarkedKana', 'kanaStats', 'srsItems',
-            'badges', 'cultureCards', 'gameRecords', 'studyLogs',
-            'dailyMissions', 'acknowledgedPraiseIds', 'lastBackupAt',
-            'startDate', 'updatedAt'
+            'learnedKana', 'bookmarkedKana',
+            'learnedVocab', 'bookmarkedVocab',
+            'learnedKanji', 'bookmarkedKanji',
+            'learnedGrammar', 'fourWeekPlanChecks',
+            'kanaStats', 'srsItems', 'badges', 'cultureCards',
+            'mockExamHistory', 'wrongNoteEntries', 'purchasedItems',
+            'gameRecords', 'studyLogs', 'dailyMissions',
+            'acknowledgedPraiseIds', 'lastBackupAt', 'startDate', 'updatedAt'
           ]))
         );
 

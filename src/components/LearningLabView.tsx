@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Eraser,
   Mic,
+  Play,
   Printer,
   RefreshCw,
   RotateCcw,
@@ -17,6 +18,7 @@ import { ADVENTURE_STAGES } from '../data/adventureRoadmapData';
 import { CONFUSING_PAIRS } from '../data/confusingPairsData';
 import { CULTURE_CARDS } from '../data/cultureAndBadgesData';
 import { VOCAB_PREVIEW } from '../data/curriculumPreviewData';
+import { getStrokeOrderSpec } from '../data/strokeOrderData';
 import {
   ALL_KANA,
   HIRAGANA_BASIC,
@@ -33,22 +35,52 @@ import {
   playSfx,
   speakJapanese
 } from '../lib/speech';
-import { getDueSrsChars, SRS_INTERVALS } from '../lib/storage';
-import { KanaItem, PrintSubTab, StudentState, StudySubTab } from '../types';
+import { getDueSrsChars, SRS_INTERVALS, WRONG_REASON_META } from '../lib/storage';
+import {
+  JlptLevel,
+  KanaItem,
+  LastStudyLocation,
+  PrintSubTab,
+  StudentState,
+  StudySubTab,
+  SubDifficulty,
+  WrongNoteEntry,
+  WrongReasonTag
+} from '../types';
+import { KanjiTrainerPanel, VerbGrammarPanel, VocabPanel } from './StudyN5PlusPanels';
 
 interface LearningLabViewProps {
   state: StudentState;
   subTab: StudySubTab;
   selectedRowId: string;
+  initialKanaChar?: string;
+  initialVocabId?: string;
+  initialKanjiId?: string;
+  initialGrammarId?: string;
   onChangeSubTab: (tab: StudySubTab) => void;
   onSelectRow: (rowId: string) => void;
   onMarkKanaLearned: (char: string) => void;
   onToggleBookmark: (char: string) => void;
-  onRecordAttempt: (char: string, isCorrect: boolean, confusedChar?: string) => void;
+  onRecordAttempt: (
+    char: string,
+    isCorrect: boolean,
+    confusedChar?: string,
+    isGameContext?: boolean
+  ) => void;
   onCompleteStageQuiz: (stageId: string, scorePercent: number, correctCount: number, totalCount: number) => void;
   onCompleteSrsSession: (reviewedCount: number) => void;
   onCompleteSpeakingMission: () => void;
   onOpenPrintForPair: (pairId: string, subTab: PrintSubTab) => void;
+  onChangeLevelScope: (lvl: JlptLevel, sub: SubDifficulty) => void;
+  onToggleVocabLearned: (id: string) => void;
+  onToggleVocabBookmark: (id: string) => void;
+  onToggleKanjiLearned: (id: string) => void;
+  onToggleKanjiBookmark: (id: string) => void;
+  onToggleGrammarLearned: (id: string) => void;
+  onRecordWrongNote: (entry: Omit<WrongNoteEntry, 'id' | 'createdAt'>) => string;
+  onTagWrongNote: (entryId: string, reasonTag: WrongReasonTag) => void;
+  onUpdateLastLocation: (loc: LastStudyLocation) => void;
+  onGrantStudyExp: (expGain: number, reason: string) => void;
   onNotify: (msg: string, type?: 'success' | 'info' | 'warning') => void;
 }
 
@@ -87,10 +119,172 @@ function shuffleArray<T>(arr: T[]): T[] {
   return copy;
 }
 
+const KanaStrokeAnimator: React.FC<{ char: string }> = ({ char }) => {
+  const spec = React.useMemo(() => getStrokeOrderSpec(char), [char]);
+  const totalStrokes = spec.paths.length;
+  const [step, setStep] = React.useState(0);
+  const [replayNonce, setReplayNonce] = React.useState(0);
+
+  React.useEffect(() => {
+    setStep(0);
+    setReplayNonce((n) => n + 1);
+  }, [char]);
+
+  React.useEffect(() => {
+    if (totalStrokes <= 0) return;
+    if (step >= totalStrokes) return;
+    const timer = window.setTimeout(() => {
+      setStep((s) => s + 1);
+    }, 680);
+    return () => window.clearTimeout(timer);
+  }, [step, totalStrokes, char, replayNonce]);
+
+  const handleReplay = () => {
+    setStep(0);
+    setReplayNonce((n) => n + 1);
+  };
+
+  if (totalStrokes === 0) return null;
+
+  return (
+    <div className="rounded-2xl bg-[#FFF7EC] border-2 border-[#FFE1C2] p-3.5 space-y-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div className="text-xs font-extrabold text-[#2B2340]">
+            획순 가이드 ({totalStrokes}획)
+          </div>
+          <div className="text-[11px] font-semibold text-[#2B2340]/65">
+            번호 순서대로 선이 그려지는 방향을 보며 따라 써 보세요
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleReplay}
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-white border border-[#FFE1C2] hover:border-[#FF6B57] text-[11px] font-extrabold text-[#2B2340] cursor-pointer shrink-0"
+        >
+          <Play className="w-3 h-3 text-[#FF6B57]" />
+          <span>다시 보기</span>
+        </button>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <div className="w-[104px] h-[104px] rounded-2xl bg-white border-2 border-[#FFE1C2] shrink-0 overflow-hidden">
+          <svg
+            key={`${char}_${replayNonce}`}
+            viewBox="0 0 100 100"
+            className="w-full h-full"
+            aria-label={`${char} 획순 애니메이션`}
+          >
+            {/* Crosshair */}
+            <line x1="50" y1="0" x2="50" y2="100" stroke="#FFE8D2" strokeWidth="1.2" strokeDasharray="3 3" />
+            <line x1="0" y1="50" x2="100" y2="50" stroke="#FFE8D2" strokeWidth="1.2" strokeDasharray="3 3" />
+
+            {/* Ghost base */}
+            {spec.paths.map((stroke, idx) => (
+              <path
+                key={`ghost_${idx}`}
+                d={stroke.d}
+                fill="none"
+                stroke="#EFEAF4"
+                strokeWidth="7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ))}
+
+            {/* Animated strokes */}
+            {spec.paths.map((stroke, idx) => {
+              const isCompleted = idx < step;
+              const isDrawing = idx === step;
+              if (!isCompleted && !isDrawing) return null;
+              return (
+                <path
+                  key={`draw_${replayNonce}_${idx}`}
+                  d={stroke.d}
+                  pathLength={100}
+                  fill="none"
+                  stroke={isDrawing ? '#FF6B57' : '#2B2340'}
+                  strokeWidth="7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeDasharray="100"
+                  strokeDashoffset={isDrawing ? undefined : 0}
+                  className={isDrawing ? 'kana-stroke-active' : ''}
+                />
+              );
+            })}
+
+            {/* Stroke numbers */}
+            {spec.paths.map((stroke, idx) => {
+              const active = idx === step || (step >= totalStrokes && idx === totalStrokes - 1);
+              return (
+                <g key={`num_${idx}`} transform={`translate(${stroke.startX}, ${stroke.startY})`}>
+                  <circle
+                    r="6.2"
+                    fill={active ? '#FF6B57' : idx < step ? '#4CC38A' : '#FFFFFF'}
+                    stroke={active || idx < step ? '#FFFFFF' : '#2B2340'}
+                    strokeWidth="1.2"
+                  />
+                  <text
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize="7.5"
+                    fontWeight="800"
+                    fill={active || idx < step ? '#FFFFFF' : '#2B2340'}
+                  >
+                    {idx + 1}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+
+        <div className="flex-1 space-y-2">
+          <div className="flex flex-wrap gap-1.5">
+            {spec.paths.map((_, idx) => {
+              const active = idx === step;
+              const done = idx < step;
+              return (
+                <button
+                  key={`pill_${idx}`}
+                  type="button"
+                  onClick={() => {
+                    setStep(idx);
+                    setReplayNonce((n) => n + 1);
+                  }}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-num font-extrabold border cursor-pointer transition-colors ${
+                    active
+                      ? 'bg-[#FF6B57] border-[#FF6B57] text-white'
+                      : done
+                        ? 'bg-[#4CC38A]/15 border-[#4CC38A] text-[#1f7d52]'
+                        : 'bg-white border-[#FFE1C2] text-[#2B2340]/70'
+                  }`}
+                >
+                  {idx + 1}획
+                </button>
+              );
+            })}
+          </div>
+          <div className="text-[11px] font-bold text-[#2B2340]/75">
+            {step < totalStrokes
+              ? `${step + 1}획 쓰는 방향 재생 중...`
+              : `${totalStrokes}획 모두 재생 완료! 번호를 누르면 해당 획만 다시 볼 수 있어요.`}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const LearningLabView: React.FC<LearningLabViewProps> = ({
   state,
   subTab,
   selectedRowId,
+  initialKanaChar,
+  initialVocabId,
+  initialKanjiId,
+  initialGrammarId,
   onChangeSubTab,
   onSelectRow,
   onMarkKanaLearned,
@@ -100,6 +294,16 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
   onCompleteSrsSession,
   onCompleteSpeakingMission,
   onOpenPrintForPair,
+  onChangeLevelScope,
+  onToggleVocabLearned,
+  onToggleVocabBookmark,
+  onToggleKanjiLearned,
+  onToggleKanjiBookmark,
+  onToggleGrammarLearned,
+  onRecordWrongNote,
+  onTagWrongNote,
+  onUpdateLastLocation,
+  onGrantStudyExp,
   onNotify
 }) => {
   // 1. Kana Cards state
@@ -111,10 +315,51 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
 
   const [selectedCharIdx, setSelectedCharIdx] = React.useState(0);
   React.useEffect(() => {
+    if (initialKanaChar) {
+      const idx = rowItems.findIndex((k) => k.char === initialKanaChar);
+      if (idx >= 0) {
+        setSelectedCharIdx(idx);
+        return;
+      }
+    }
     setSelectedCharIdx(0);
-  }, [selectedRowId]);
+  }, [selectedRowId, initialKanaChar, rowItems]);
 
   const activeKana: KanaItem | null = rowItems[selectedCharIdx] || rowItems[0] || null;
+
+  React.useEffect(() => {
+    if (subTab === 'kana' && activeKana) {
+      onUpdateLastLocation({
+        tab: 'study',
+        studySubTab: 'kana',
+        rowId: selectedRowId,
+        kanaChar: activeKana.char,
+        label: `${activeKana.rowLabel} 「${activeKana.char} (${activeKana.ko})」 학습`,
+        updatedAt: new Date().toISOString()
+      });
+    } else if (subTab === 'gojuon') {
+      onUpdateLastLocation({
+        tab: 'study',
+        studySubTab: 'gojuon',
+        label: '오십음도 발음표',
+        updatedAt: new Date().toISOString()
+      });
+    } else if (subTab === 'confusing') {
+      onUpdateLastLocation({
+        tab: 'study',
+        studySubTab: 'confusing',
+        label: '헷갈리는 글자 비교',
+        updatedAt: new Date().toISOString()
+      });
+    } else if (subTab === 'srs') {
+      onUpdateLastLocation({
+        tab: 'study',
+        studySubTab: 'srs',
+        label: '망각 곡선 스마트 복습',
+        updatedAt: new Date().toISOString()
+      });
+    }
+  }, [subTab, selectedRowId, activeKana?.char]);
 
   // Handwriting Canvas
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
@@ -240,6 +485,8 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
     correct: number;
     answeredChar: string | null;
     finished: boolean;
+    wrongNoteId: string | null;
+    selectedTag?: WrongReasonTag;
   } | null>(null);
 
   const matchingStage = React.useMemo(() => {
@@ -274,40 +521,73 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
       index: 0,
       correct: 0,
       answeredChar: null,
-      finished: false
+      finished: false,
+      wrongNoteId: null
     });
     speakJapanese(questions[0].target.char);
   };
 
-  const handleStageQuizAnswer = (picked: KanaItem) => {
-    if (!quizState || quizState.answeredChar) return;
-    const current = quizState.questions[quizState.index];
-    const isOk = picked.char === current.target.char;
-    playSfx(isOk ? 'correct' : 'wrong');
-    onRecordAttempt(current.target.char, isOk, isOk ? undefined : picked.char);
-
-    const nextCorrect = quizState.correct + (isOk ? 1 : 0);
-    setQuizState({ ...quizState, answeredChar: picked.char, correct: nextCorrect });
-
-    setTimeout(() => {
+  const advanceStageQuiz = React.useCallback(
+    (nextCorrectCount: number) => {
       setQuizState((prev) => {
         if (!prev) return null;
         if (prev.index + 1 >= prev.questions.length) {
-          const pct = Math.round((nextCorrect / prev.questions.length) * 100);
+          const pct = Math.round((nextCorrectCount / prev.questions.length) * 100);
           if (matchingStage) {
-            onCompleteStageQuiz(matchingStage.id, pct, nextCorrect, prev.questions.length);
+            onCompleteStageQuiz(matchingStage.id, pct, nextCorrectCount, prev.questions.length);
           }
-          return { ...prev, finished: true };
+          return { ...prev, finished: true, wrongNoteId: null, selectedTag: undefined };
         }
         const nextQ = prev.questions[prev.index + 1];
         speakJapanese(nextQ.target.char);
         return {
           ...prev,
           index: prev.index + 1,
-          answeredChar: null
+          answeredChar: null,
+          wrongNoteId: null,
+          selectedTag: undefined
         };
       });
-    }, 650);
+    },
+    [matchingStage, onCompleteStageQuiz]
+  );
+
+  const handleStageQuizAnswer = (picked: KanaItem) => {
+    if (!quizState || quizState.answeredChar) return;
+    const current = quizState.questions[quizState.index];
+    const isOk = picked.char === current.target.char;
+    playSfx(isOk ? 'correct' : 'wrong');
+    onRecordAttempt(current.target.char, isOk, isOk ? undefined : picked.char, false);
+
+    let wrongId: string | null = null;
+    if (!isOk) {
+      const optLabels = current.options.map((o) => `${o.char} (${o.ko})`);
+      wrongId = onRecordWrongNote({
+        sourceType: 'kana',
+        level: matchingStage?.world || 'STAGE0',
+        title: `${current.target.rowLabel} 단계 퀴즈`,
+        prompt: `소리 "${current.target.ko} [${current.target.romaji}]"에 알맞은 글자는?`,
+        options: optLabels,
+        correctIndex: current.options.findIndex((o) => o.char === current.target.char),
+        pickedIndex: current.options.findIndex((o) => o.char === picked.char),
+        explanation: `${current.target.char} = ${current.target.ko} [${current.target.romaji}] · ${current.target.mnemonicTip}`
+      });
+    }
+
+    const nextCorrect = quizState.correct + (isOk ? 1 : 0);
+    setQuizState({
+      ...quizState,
+      answeredChar: picked.char,
+      correct: nextCorrect,
+      wrongNoteId: wrongId,
+      selectedTag: undefined
+    });
+
+    if (isOk) {
+      setTimeout(() => {
+        advanceStageQuiz(nextCorrect);
+      }, 650);
+    }
   };
 
   // 2. Gojuon Chart filter
@@ -321,6 +601,8 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
     correct: number;
     picked: string | null;
     done: boolean;
+    wrongNoteId: string | null;
+    selectedTag?: WrongReasonTag;
   } | null>(null);
 
   const startConfusingQuiz = (pairId: string) => {
@@ -341,33 +623,64 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
       index: 0,
       correct: 0,
       picked: null,
-      done: false
+      done: false,
+      wrongNoteId: null
     });
   };
+
+  const advanceConfusingQuiz = React.useCallback(
+    (nextCorrectCount: number) => {
+      setConfusingQuiz((prev) => {
+        if (!prev) return null;
+        if (prev.index + 1 >= prev.questions.length) {
+          onNotify(
+            `구별 훈련 완료! ${nextCorrectCount}/${prev.questions.length} 정답`,
+            nextCorrectCount >= 5 ? 'success' : 'info'
+          );
+          return { ...prev, done: true, wrongNoteId: null, selectedTag: undefined };
+        }
+        return { ...prev, index: prev.index + 1, picked: null, wrongNoteId: null, selectedTag: undefined };
+      });
+    },
+    [onNotify]
+  );
 
   const handleConfusingAnswer = (pickedChar: string) => {
     if (!confusingQuiz || confusingQuiz.picked) return;
     const current = confusingQuiz.questions[confusingQuiz.index];
     const isOk = pickedChar === current.targetChar;
     playSfx(isOk ? 'correct' : 'wrong');
-    onRecordAttempt(current.targetChar, isOk, isOk ? undefined : pickedChar);
+    onRecordAttempt(current.targetChar, isOk, isOk ? undefined : pickedChar, false);
+
+    let wrongId: string | null = null;
+    if (!isOk) {
+      const pair = CONFUSING_PAIRS.find((p) => p.id === confusingQuiz.pairId);
+      wrongId = onRecordWrongNote({
+        sourceType: 'kana',
+        level: 'STAGE0',
+        title: `헷갈리는 글자 · ${pair?.title || ''}`,
+        prompt: `발음 "${current.ko} [${current.romaji}]"에 알맞은 글자는?`,
+        options: current.options,
+        correctIndex: current.options.indexOf(current.targetChar),
+        pickedIndex: current.options.indexOf(pickedChar),
+        explanation: pair?.summaryTip || `${current.targetChar} = ${current.ko} [${current.romaji}]`
+      });
+    }
 
     const nextCorrect = confusingQuiz.correct + (isOk ? 1 : 0);
-    setConfusingQuiz({ ...confusingQuiz, picked: pickedChar, correct: nextCorrect });
+    setConfusingQuiz({
+      ...confusingQuiz,
+      picked: pickedChar,
+      correct: nextCorrect,
+      wrongNoteId: wrongId,
+      selectedTag: undefined
+    });
 
-    setTimeout(() => {
-      setConfusingQuiz((prev) => {
-        if (!prev) return null;
-        if (prev.index + 1 >= prev.questions.length) {
-          onNotify(
-            `구별 훈련 완료! ${nextCorrect}/${prev.questions.length} 정답`,
-            nextCorrect >= 5 ? 'success' : 'info'
-          );
-          return { ...prev, done: true };
-        }
-        return { ...prev, index: prev.index + 1, picked: null };
-      });
-    }, 600);
+    if (isOk) {
+      setTimeout(() => {
+        advanceConfusingQuiz(nextCorrect);
+      }, 600);
+    }
   };
 
   // 4. SRS Forgetting Curve Review Session
@@ -438,7 +751,10 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
             { id: 'kana' as const, label: '가나 카드 · 쓰기' },
             { id: 'gojuon' as const, label: '오십음도 발음표' },
             { id: 'confusing' as const, label: '헷갈리는 글자 비교' },
-            { id: 'srs' as const, label: `망각 곡선 복습 (${dueChars.length})` }
+            { id: 'srs' as const, label: `망각 곡선 복습 (${dueChars.length})` },
+            { id: 'vocab' as const, label: '단어장' },
+            { id: 'kanji' as const, label: '한자 트레이너' },
+            { id: 'grammar' as const, label: '동사 활용 · 문법' }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -568,7 +884,7 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
                           {activeKana.rowLabel} · {activeKana.script === 'hiragana' ? '히라가나' : '가타카나'} (짝: {activeKana.counterpart})
                         </span>
                         <div className="mt-2 flex items-baseline gap-4">
-                          <span className="font-jp text-[86px] sm:text-[104px] font-extrabold leading-none text-[#2B2340]">
+                          <span className="font-jp jp-card-glyph text-[86px] sm:text-[104px] font-extrabold leading-none text-[#2B2340]">
                             {activeKana.char}
                           </span>
                           <div>
@@ -743,6 +1059,9 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
                       />
                     </div>
 
+                    {/* Interactive Kana Stroke Order Guide */}
+                    <KanaStrokeAnimator char={activeKana.char} />
+
                     <div className="flex items-center justify-between gap-2">
                       <button
                         type="button"
@@ -858,6 +1177,46 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
                             );
                           })}
                         </div>
+
+                        {quizState.answeredChar && quizState.wrongNoteId && (
+                          <div className="rounded-2xl bg-[#FFF7EC] border border-[#FFE1C2] p-3 space-y-2">
+                            <div className="text-[11px] font-extrabold text-[#2B2340]">
+                              틀린 이유 선택 (선택 안 하고 넘어가도 돼요)
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {(Object.keys(WRONG_REASON_META) as WrongReasonTag[]).map((tagKey) => {
+                                const meta = WRONG_REASON_META[tagKey];
+                                const sel = quizState.selectedTag === tagKey;
+                                return (
+                                  <button
+                                    key={tagKey}
+                                    type="button"
+                                    onClick={() => {
+                                      onTagWrongNote(quizState.wrongNoteId!, tagKey);
+                                      setQuizState((prev) =>
+                                        prev ? { ...prev, selectedTag: tagKey } : null
+                                      );
+                                    }}
+                                    className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold border cursor-pointer transition-colors ${
+                                      sel
+                                        ? 'bg-[#2B2340] border-[#2B2340] text-white'
+                                        : 'bg-white border-[#FFE1C2] text-[#2B2340] hover:border-[#FF6B57]'
+                                    }`}
+                                  >
+                                    {meta.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => advanceStageQuiz(quizState.correct)}
+                              className="w-full py-2 rounded-full bg-[#2B2340] text-white text-xs font-extrabold cursor-pointer"
+                            >
+                              {quizState.index + 1 >= quizState.questions.length ? '결과 보기 →' : '다음 문제 →'}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1025,6 +1384,46 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
                   );
                 })}
               </div>
+
+              {confusingQuiz.picked && confusingQuiz.wrongNoteId && (
+                <div className="rounded-2xl bg-[#FFF7EC] border border-[#FFE1C2] p-3.5 max-w-md mx-auto space-y-2.5 text-center">
+                  <div className="text-[11px] font-extrabold text-[#2B2340]">
+                    틀린 이유 선택 (선택 안 하고 넘어가도 돼요)
+                  </div>
+                  <div className="flex flex-wrap justify-center gap-1.5">
+                    {(Object.keys(WRONG_REASON_META) as WrongReasonTag[]).map((tagKey) => {
+                      const meta = WRONG_REASON_META[tagKey];
+                      const sel = confusingQuiz.selectedTag === tagKey;
+                      return (
+                        <button
+                          key={tagKey}
+                          type="button"
+                          onClick={() => {
+                            onTagWrongNote(confusingQuiz.wrongNoteId!, tagKey);
+                            setConfusingQuiz((prev) =>
+                              prev ? { ...prev, selectedTag: tagKey } : null
+                            );
+                          }}
+                          className={`px-3 py-1 rounded-full text-[11px] font-extrabold border cursor-pointer transition-colors ${
+                            sel
+                              ? 'bg-[#2B2340] border-[#2B2340] text-white'
+                              : 'bg-white border-[#FFE1C2] text-[#2B2340] hover:border-[#FF6B57]'
+                          }`}
+                        >
+                          {meta.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => advanceConfusingQuiz(confusingQuiz.correct)}
+                    className="w-full py-2 rounded-full bg-[#2B2340] text-white text-xs font-extrabold cursor-pointer"
+                  >
+                    {confusingQuiz.index + 1 >= confusingQuiz.questions.length ? '결과 보기 →' : '다음 문제 →'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -1161,7 +1560,7 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
                   </div>
 
                   <div className="py-4">
-                    <div className="font-jp text-[92px] font-extrabold text-[#2B2340] leading-none">
+                    <div className="font-jp jp-card-glyph-center text-[92px] font-extrabold text-[#2B2340] leading-none">
                       {srsSession.queue[srsSession.index].char}
                     </div>
                     <button
@@ -1218,6 +1617,45 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
             </div>
           )}
         </div>
+      )}
+
+      {/* TAB 5: VOCABULARY */}
+      {subTab === 'vocab' && (
+        <VocabPanel
+          state={state}
+          initialVocabId={initialVocabId}
+          onChangeLevelScope={onChangeLevelScope}
+          onToggleVocabLearned={onToggleVocabLearned}
+          onToggleVocabBookmark={onToggleVocabBookmark}
+          onUpdateLastLocation={onUpdateLastLocation}
+        />
+      )}
+
+      {/* TAB 6: KANJI TRAINER */}
+      {subTab === 'kanji' && (
+        <KanjiTrainerPanel
+          state={state}
+          initialKanjiId={initialKanjiId}
+          onChangeLevelScope={onChangeLevelScope}
+          onToggleKanjiLearned={onToggleKanjiLearned}
+          onToggleKanjiBookmark={onToggleKanjiBookmark}
+          onRecordWrongNote={onRecordWrongNote}
+          onTagWrongNote={onTagWrongNote}
+          onGrantStudyExp={onGrantStudyExp}
+          onUpdateLastLocation={onUpdateLastLocation}
+        />
+      )}
+
+      {/* TAB 7: VERB CONJUGATION & GRAMMAR COMPARISON */}
+      {subTab === 'grammar' && (
+        <VerbGrammarPanel
+          state={state}
+          initialGrammarId={initialGrammarId}
+          onChangeLevelScope={onChangeLevelScope}
+          onToggleGrammarLearned={onToggleGrammarLearned}
+          onGrantStudyExp={onGrantStudyExp}
+          onUpdateLastLocation={onUpdateLastLocation}
+        />
       )}
     </div>
   );

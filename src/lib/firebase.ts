@@ -18,8 +18,12 @@ import {
   updateDoc
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { StudentState } from '../types';
-import { createInitialStudentState, normalizeDailyState } from './storage';
+import { DEFAULT_PROFILE_EMOJI, DEFAULT_STUDENT_NAME, StudentState } from '../types';
+import {
+  DEFAULT_KANA_DROP_TIME_LIMITS,
+  DEFAULT_SHOP_CATALOG,
+  mergeStudentState
+} from './storage';
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
@@ -104,7 +108,6 @@ export async function signOutGoogle(): Promise<void> {
 export async function checkIsAdmin(user: User | null): Promise<boolean> {
   if (!user || !user.emailVerified) return false;
   if (user.email === BOOTSTRAPPED_ADMIN_EMAIL) {
-    // Ensure admin registry doc exists for bootstrapped admin
     const adminPath = `admins/${user.uid}`;
     try {
       const ref = doc(db, 'admins', user.uid);
@@ -154,29 +157,54 @@ export async function addAdminByUid(adminUid: string, email: string, displayName
 function sanitizeStudentPayload(state: StudentState, uid: string) {
   return {
     uid,
-    studentName: (state.studentName || '지우').slice(0, 40),
-    level: Number(state.level) || 1,
-    exp: Number(state.exp) || 0,
+    studentName: (state.studentName || DEFAULT_STUDENT_NAME).trim().slice(0, 40) || DEFAULT_STUDENT_NAME,
+    profileEmoji: (state.profileEmoji || DEFAULT_PROFILE_EMOJI).trim().slice(0, 16) || DEFAULT_PROFILE_EMOJI,
+    profileConfigured: Boolean(state.profileConfigured),
+    diagnosticCompleted: Boolean(state.diagnosticCompleted),
+    diagnosticResult: state.diagnosticResult || null,
+    level: Math.min(200, Math.max(1, Number(state.level) || 1)),
+    exp: Math.min(10000000, Math.max(0, Number(state.exp) || 0)),
+    coins: Math.min(10000000, Math.max(0, Number(state.coins) || 0)),
+    gameExpToday: Math.min(10000, Math.max(0, Number(state.gameExpToday) || 0)),
+    gameExpDate: (state.gameExpDate || '').slice(0, 20),
+    fontSizeScale:
+      state.fontSizeScale === 'large' || state.fontSizeScale === 'xlarge'
+        ? state.fontSizeScale
+        : 'normal',
+    lastStudyLocation: state.lastStudyLocation || null,
     targetLevel: state.targetLevel || 'STAGE0',
-    subLevel: Number(state.subLevel) || 1,
-    streak: Number(state.streak) || 0,
+    subLevel: Math.min(3, Math.max(1, Number(state.subLevel) || 1)),
+    streak: Math.min(3650, Math.max(0, Number(state.streak) || 0)),
     lastStudyDate: (state.lastStudyDate || '').slice(0, 20),
     streakDates: (state.streakDates || []).slice(-366),
-    streakProtections: Number(state.streakProtections) || 0,
+    streakProtections: Math.min(50, Math.max(0, Number(state.streakProtections) || 0)),
     currentStageId: (state.currentStageId || 'stage_h_a').slice(0, 64),
     unlockedStages: (state.unlockedStages || ['stage_h_a']).slice(0, 100),
     completedStages: (state.completedStages || []).slice(0, 100),
     learnedKana: (state.learnedKana || []).slice(0, 300),
     bookmarkedKana: (state.bookmarkedKana || []).slice(0, 300),
+    learnedVocab: (state.learnedVocab || []).slice(0, 500),
+    bookmarkedVocab: (state.bookmarkedVocab || []).slice(0, 500),
+    learnedKanji: (state.learnedKanji || []).slice(0, 500),
+    bookmarkedKanji: (state.bookmarkedKanji || []).slice(0, 500),
+    learnedGrammar: (state.learnedGrammar || []).slice(0, 500),
+    fourWeekPlanChecks: (state.fourWeekPlanChecks || []).slice(0, 100),
     kanaStats: state.kanaStats || {},
     srsItems: state.srsItems || {},
     badges: (state.badges || []).slice(0, 100),
     cultureCards: (state.cultureCards || []).slice(0, 100),
+    mockExamHistory: (state.mockExamHistory || []).slice(-100),
+    wrongNoteEntries: (state.wrongNoteEntries || []).slice(-200),
+    shopCatalog: (state.shopCatalog || DEFAULT_SHOP_CATALOG).slice(0, 50),
+    purchasedItems: (state.purchasedItems || []).slice(-100),
     gameRecords: state.gameRecords || {
       kanaDropBest: 0,
+      kanaDropBestByDifficulty: { easy: 0, normal: 0, hard: 0 },
       kanaDropPlaysToday: 0,
       listeningBest: 0,
       listeningPlaysToday: 0,
+      pairMatchBest: 0,
+      pairMatchPlaysToday: 0,
       lastGameDate: ''
     },
     studyLogs: state.studyLogs || {},
@@ -185,7 +213,11 @@ function sanitizeStudentPayload(state: StudentState, uid: string) {
       dailyNewChars: 5,
       dailyGameMissions: 1,
       autoWeakReview: true,
-      dailyMinutesGoal: 15
+      dailyMinutesGoal: 15,
+      dailyGameExpCap: 100,
+      breakReminderEnabled: true,
+      breakReminderMinutes: 40,
+      kanaDropTimeLimits: { ...DEFAULT_KANA_DROP_TIME_LIMITS }
     },
     praiseMessages: (state.praiseMessages || []).slice(-50),
     acknowledgedPraiseIds: (state.acknowledgedPraiseIds || []).slice(-100),
@@ -200,18 +232,17 @@ export async function loadStudentFromCloud(uid: string): Promise<StudentState | 
     const snap = await getDoc(doc(db, 'students', uid));
     if (!snap.exists()) return null;
     const data = snap.data() as Partial<StudentState>;
-    const base = createInitialStudentState(uid, data.studentName || '지우');
-    return normalizeDailyState({
-      ...base,
-      ...data,
-      uid,
-      gameRecords: { ...base.gameRecords, ...(data.gameRecords || {}) },
-      dailyMissions: { ...base.dailyMissions, ...(data.dailyMissions || {}) },
-      missionSettings: { ...base.missionSettings, ...(data.missionSettings || {}) },
-      kanaStats: data.kanaStats || {},
-      srsItems: data.srsItems || {},
-      studyLogs: data.studyLogs || {}
-    });
+    const normalized = mergeStudentState(
+      {
+        ...data,
+        profileConfigured:
+          typeof data.profileConfigured === 'boolean'
+            ? data.profileConfigured
+            : !(data.profileConfigured === undefined && data.studentName === '지우')
+      },
+      uid
+    );
+    return normalized;
   } catch (err) {
     handleFirestoreError(err, OperationType.GET, path);
   }
@@ -236,7 +267,6 @@ export async function saveStudentToCloud(
         updatedAt: serverTimestamp()
       });
 
-      // Isolate PII email into /students/{uid}/private/account
       if (targetUid === user.uid && user.email) {
         const privPath = `students/${targetUid}/private/account`;
         try {
@@ -261,11 +291,12 @@ export async function saveStudentToCloud(
         updatedAt: serverTimestamp()
       });
     } else {
-      // Student Tier 2 update excludes admin-controlled missionSettings & praiseMessages
+      // Tier 2 update strictly excludes admin-controlled fields (missionSettings, praiseMessages, shopCatalog)
       const {
         uid: _omitUid,
         missionSettings: _omitMissions,
         praiseMessages: _omitPraise,
+        shopCatalog: _omitShop,
         ...studentUpdatable
       } = payload;
       await updateDoc(docRef, {
@@ -284,18 +315,16 @@ export async function fetchAllStudentsForAdmin(): Promise<StudentState[]> {
     const snaps = await getDocs(collection(db, 'students'));
     return snaps.docs.map((d) => {
       const data = d.data() as Partial<StudentState>;
-      const base = createInitialStudentState(d.id, data.studentName || '학생');
-      return normalizeDailyState({
-        ...base,
-        ...data,
-        uid: d.id,
-        gameRecords: { ...base.gameRecords, ...(data.gameRecords || {}) },
-        dailyMissions: { ...base.dailyMissions, ...(data.dailyMissions || {}) },
-        missionSettings: { ...base.missionSettings, ...(data.missionSettings || {}) },
-        kanaStats: data.kanaStats || {},
-        srsItems: data.srsItems || {},
-        studyLogs: data.studyLogs || {}
-      });
+      return mergeStudentState(
+        {
+          ...data,
+          profileConfigured:
+            typeof data.profileConfigured === 'boolean'
+              ? data.profileConfigured
+              : !(data.profileConfigured === undefined && data.studentName === '지우')
+        },
+        d.id
+      );
     });
   } catch (err) {
     handleFirestoreError(err, OperationType.LIST, path);

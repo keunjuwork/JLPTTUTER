@@ -12,17 +12,44 @@
     --ink-navy: #2B2340;
   }
 
+  html {
+    font-size: 16px;
+    --jp-glyph-scale: 1;
+  }
+
+  html[data-font-scale="large"] {
+    font-size: 17.5px;
+    --jp-glyph-scale: 1.12;
+  }
+
+  html[data-font-scale="xlarge"] {
+    font-size: 19px;
+    --jp-glyph-scale: 1.24;
+  }
+
   body {
     background-color: #FFF7EC;
     color: #2B2340;
-    font-family: 'Noto Sans KR', system-ui, -apple-system, sans-serif;
+    font-family: 'Noto Sans KR', 'Noto Sans JP', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
   }
 }
 
 .font-jp {
-  font-family: 'Noto Sans JP', 'Noto Sans KR', sans-serif;
+  font-family: 'Noto Sans JP', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', 'Noto Sans KR', sans-serif;
+}
+
+.jp-card-glyph {
+  display: inline-block;
+  transform: scale(var(--jp-glyph-scale));
+  transform-origin: left center;
+}
+
+.jp-card-glyph-center {
+  display: inline-block;
+  transform: scale(var(--jp-glyph-scale));
+  transform-origin: center;
 }
 
 .font-num {
@@ -32,6 +59,19 @@
 
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+@keyframes kana-stroke-draw {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.kana-stroke-active {
+  animation: kana-stroke-draw 0.58s ease-out forwards;
 }
 
 /* Crisp custom scrollbars for horizontal adventure map & tables */
@@ -54,11 +94,21 @@
 }
 
 @media print {
+  html {
+    font-size: 15px !important;
+  }
+
   body {
     background: #FFFFFF !important;
     color: #000000 !important;
+    font-family: 'Noto Sans JP', 'Noto Sans KR', system-ui, sans-serif !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+
+  .font-jp,
+  .print-sheet {
+    font-family: 'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', 'Noto Sans KR', sans-serif !important;
   }
 
   .print\:hidden {

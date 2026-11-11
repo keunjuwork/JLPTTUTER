@@ -4,14 +4,23 @@ export function isSpeechSynthesisSupported(): boolean {
   return typeof window !== 'undefined' && 'speechSynthesis' in window;
 }
 
-export function speakJapanese(text: string, rate = 0.95): void {
+export function stopJapaneseSpeech(): void {
+  if (!isSpeechSynthesisSupported()) return;
+  try {
+    window.speechSynthesis.cancel();
+  } catch {
+    // ignore
+  }
+}
+
+export function speakJapanese(text: string, rate = 0.95, pitch = 1.05): void {
   if (!isSpeechSynthesisSupported() || !text.trim()) return;
   try {
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = 'ja-JP';
     utter.rate = rate;
-    utter.pitch = 1.05;
+    utter.pitch = pitch;
 
     const voices = window.speechSynthesis.getVoices();
     const jaVoice = voices.find((v) => v.lang.toLowerCase().startsWith('ja'));
@@ -22,6 +31,53 @@ export function speakJapanese(text: string, rate = 0.95): void {
   } catch {
     // Graceful silent fallback if browser blocks synthesis
   }
+}
+
+export function speakJapanesePromise(
+  text: string,
+  rate = 0.95,
+  pitch = 1.05
+): Promise<void> {
+  return new Promise((resolve) => {
+    if (!isSpeechSynthesisSupported() || !text.trim()) {
+      setTimeout(resolve, Math.min(2500, Math.max(700, text.length * 60)));
+      return;
+    }
+    try {
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'ja-JP';
+      utter.rate = rate;
+      utter.pitch = pitch;
+
+      const voices = window.speechSynthesis.getVoices();
+      const jaVoice = voices.find((v) => v.lang.toLowerCase().startsWith('ja'));
+      if (jaVoice) {
+        utter.voice = jaVoice;
+      }
+
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      // Safety fallback timeout in case browser speechSynthesis stalls without firing onend
+      const estMs = Math.max(2500, Math.round((text.length * 140) / Math.max(0.5, rate)) + 2000);
+      const fallbackTimer = setTimeout(done, estMs);
+
+      utter.onend = () => {
+        clearTimeout(fallbackTimer);
+        done();
+      };
+      utter.onerror = () => {
+        clearTimeout(fallbackTimer);
+        done();
+      };
+      window.speechSynthesis.speak(utter);
+    } catch {
+      resolve();
+    }
+  });
 }
 
 interface SpeechRecognitionAlternative {

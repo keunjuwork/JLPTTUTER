@@ -90,7 +90,7 @@
     },
     "StudentProgress": {
       "title": "StudentProgress",
-      "description": "Non-PII JLPT adventure learning progress, missions, SRS, and analytics",
+      "description": "Non-PII JLPT adventure learning progress, missions, SRS, practice exams, shop, and analytics",
       "type": "object",
       "properties": {
         "uid": {
@@ -103,11 +103,42 @@
           "minLength": 1,
           "maxLength": 40
         },
+        "profileEmoji": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16
+        },
+        "profileConfigured": {
+          "type": "boolean"
+        },
+        "diagnosticCompleted": {
+          "type": "boolean"
+        },
+        "diagnosticResult": {
+          "type": "object"
+        },
         "level": {
           "type": "number"
         },
         "exp": {
           "type": "number"
+        },
+        "coins": {
+          "type": "number"
+        },
+        "gameExpToday": {
+          "type": "number"
+        },
+        "gameExpDate": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "fontSizeScale": {
+          "type": "string",
+          "enum": ["normal", "large", "xlarge"]
+        },
+        "lastStudyLocation": {
+          "type": "object"
         },
         "targetLevel": {
           "type": "string",
@@ -145,6 +176,24 @@
         "bookmarkedKana": {
           "type": "array"
         },
+        "learnedVocab": {
+          "type": "array"
+        },
+        "bookmarkedVocab": {
+          "type": "array"
+        },
+        "learnedKanji": {
+          "type": "array"
+        },
+        "bookmarkedKanji": {
+          "type": "array"
+        },
+        "learnedGrammar": {
+          "type": "array"
+        },
+        "fourWeekPlanChecks": {
+          "type": "array"
+        },
         "kanaStats": {
           "type": "object"
         },
@@ -155,6 +204,18 @@
           "type": "array"
         },
         "cultureCards": {
+          "type": "array"
+        },
+        "mockExamHistory": {
+          "type": "array"
+        },
+        "wrongNoteEntries": {
+          "type": "array"
+        },
+        "shopCatalog": {
+          "type": "array"
+        },
+        "purchasedItems": {
           "type": "array"
         },
         "gameRecords": {

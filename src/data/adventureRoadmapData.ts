@@ -83,31 +83,31 @@ export const ADVENTURE_STAGES: AdventureStage[] = [
     id: 'stage_n5', order: 14, world: 'N5', worldLabel: 'N5 월드',
     title: 'N5 월드', badgeChar: 'N5',
     description: '기초 한자 100자, 어휘 800개, 동사 활용과 기본 문형을 시작해요.',
-    rewardCardId: 'card_kotatsu', phase1Ready: false, quizPassPercent: 80
+    rewardCardId: 'card_kotatsu', phase1Ready: true, quizPassPercent: 80
   },
   {
     id: 'stage_n4', order: 15, world: 'N4', worldLabel: 'N4 월드',
     title: 'N4 월드', badgeChar: 'N4',
     description: '일상 회화의 핵심! 수동·사역·경어 기초와 중급 연결 문법.',
-    rewardCardId: 'card_karaoke', phase1Ready: false, quizPassPercent: 80
+    rewardCardId: 'card_karaoke', phase1Ready: true, quizPassPercent: 80
   },
   {
     id: 'stage_n3', order: 16, world: 'N3', worldLabel: 'N3 월드',
     title: 'N3 월드', badgeChar: 'N3',
     description: '일상에서 자연스러운 일본어! 뉴스·에세이 독해와 한자 650자.',
-    rewardCardId: 'card_anime', phase1Ready: false, quizPassPercent: 80
+    rewardCardId: 'card_anime', phase1Ready: true, quizPassPercent: 80
   },
   {
     id: 'stage_n2', order: 17, world: 'N2', worldLabel: 'N2 월드',
     title: 'N2 월드', badgeChar: 'N2',
     description: '비즈니스·신문·논설문 독해와 폭넓은 청해 실력을 쌓아요.',
-    rewardCardId: 'card_graduation', phase1Ready: false, quizPassPercent: 80
+    rewardCardId: 'card_graduation', phase1Ready: true, quizPassPercent: 80
   },
   {
     id: 'stage_n1', order: 18, world: 'N1', worldLabel: 'N1 월드',
     title: 'N1 월드 (최종 관문)', badgeChar: 'N1',
     description: 'JLPT 최고봉 N1 합격! 추상적 논리 글과 고급 한자 2,000자 마스터.',
-    rewardCardId: 'card_cherry_crown', phase1Ready: false, quizPassPercent: 80
+    rewardCardId: 'card_cherry_crown', phase1Ready: true, quizPassPercent: 80
   }
 ];
 
