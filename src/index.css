@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-cream: #FFF7EC;
+    --surface-white: #FFFFFF;
+    --border-peach: #FFE1C2;
+    --coral-primary: #FF6B57;
+    --gold-accent: #FFD166;
+    --emerald-done: #4CC38A;
+    --locked-gray: #E8E3EF;
+    --ink-navy: #2B2340;
+  }
+
+  body {
+    background-color: #FFF7EC;
+    color: #2B2340;
+    font-family: 'Noto Sans KR', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+}
+
+.font-jp {
+  font-family: 'Noto Sans JP', 'Noto Sans KR', sans-serif;
+}
+
+.font-num {
+  font-family: 'JetBrains Mono', 'Noto Sans KR', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Crisp custom scrollbars for horizontal adventure map & tables */
+.custom-scrollbar::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #FFF1DF;
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #FFC69E;
+  border-radius: 9999px;
+}
+
+@page {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
+@media print {
+  body {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+
+  .print-sheet {
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .print-page-break {
+    page-break-before: always;
+  }
+}

@@ -1,0 +1,241 @@
+{
+  "entities": {
+    "AdminAccount": {
+      "title": "AdminAccount",
+      "description": "Authorized administrator registry record",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 254
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "role", "createdAt", "updatedAt"]
+    },
+    "AdminConfig": {
+      "title": "AdminConfig",
+      "description": "Administrator-only security and preference settings",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "pinHash": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "pinHash", "createdAt", "updatedAt"]
+    },
+    "StudentPrivateAccount": {
+      "title": "StudentPrivateAccount",
+      "description": "Isolated PII profile for a student user",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 254
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "createdAt", "updatedAt"]
+    },
+    "StudentProgress": {
+      "title": "StudentProgress",
+      "description": "Non-PII JLPT adventure learning progress, missions, SRS, and analytics",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "studentName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "level": {
+          "type": "number"
+        },
+        "exp": {
+          "type": "number"
+        },
+        "targetLevel": {
+          "type": "string",
+          "enum": ["STAGE0", "N5", "N4", "N3", "N2", "N1"]
+        },
+        "subLevel": {
+          "type": "number"
+        },
+        "streak": {
+          "type": "number"
+        },
+        "lastStudyDate": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "streakDates": {
+          "type": "array"
+        },
+        "streakProtections": {
+          "type": "number"
+        },
+        "currentStageId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "unlockedStages": {
+          "type": "array"
+        },
+        "completedStages": {
+          "type": "array"
+        },
+        "learnedKana": {
+          "type": "array"
+        },
+        "bookmarkedKana": {
+          "type": "array"
+        },
+        "kanaStats": {
+          "type": "object"
+        },
+        "srsItems": {
+          "type": "object"
+        },
+        "badges": {
+          "type": "array"
+        },
+        "cultureCards": {
+          "type": "array"
+        },
+        "gameRecords": {
+          "type": "object"
+        },
+        "studyLogs": {
+          "type": "object"
+        },
+        "dailyMissions": {
+          "type": "object"
+        },
+        "missionSettings": {
+          "type": "object"
+        },
+        "praiseMessages": {
+          "type": "array"
+        },
+        "acknowledgedPraiseIds": {
+          "type": "array"
+        },
+        "lastBackupAt": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "startDate": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "studentName",
+        "level",
+        "exp",
+        "targetLevel",
+        "subLevel",
+        "streak",
+        "currentStageId",
+        "unlockedStages",
+        "completedStages",
+        "learnedKana",
+        "bookmarkedKana",
+        "kanaStats",
+        "srsItems",
+        "badges",
+        "cultureCards",
+        "gameRecords",
+        "studyLogs",
+        "dailyMissions",
+        "missionSettings",
+        "praiseMessages",
+        "acknowledgedPraiseIds",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminAccount" },
+      "description": "Authorized admin users"
+    },
+    "/adminSettings/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminConfig" },
+      "description": "Admin PIN and private configuration"
+    },
+    "/students/{studentUid}": {
+      "schema": { "$ref": "#/entities/StudentProgress" },
+      "description": "Student learning progress and mission settings"
+    },
+    "/students/{studentUid}/private/{docId}": {
+      "schema": { "$ref": "#/entities/StudentPrivateAccount" },
+      "description": "Student isolated PII account metadata"
+    }
+  }
+}

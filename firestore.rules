@@ -1,0 +1,250 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Global Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'ai.kj1207@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (
+        isVerifiedUser() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidStringList(arr, maxLen) {
+      return arr is list && arr.size() <= maxLen && (arr.size() == 0 || arr[0] is string);
+    }
+
+    function isValidPraiseList(arr) {
+      return arr is list && arr.size() <= 50 && (arr.size() == 0 || arr[0] is map);
+    }
+
+    // Entity Validators
+    function isValidAdminAccount(data, adminUid) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid == adminUid && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100))
+        && data.role == 'admin'
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminConfig(data, adminUid) {
+      return data.keys().hasAll(['uid', 'pinHash', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'pinHash', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid == adminUid && isValidId(data.uid)
+        && data.pinHash is string && data.pinHash.size() >= 4 && data.pinHash.size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStudentPrivateAccount(data, studentUid) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid == studentUid && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStudentProgress(data, studentUid) {
+      return data.keys().hasAll([
+          'uid', 'studentName', 'level', 'exp', 'targetLevel', 'subLevel',
+          'streak', 'currentStageId', 'unlockedStages', 'completedStages',
+          'learnedKana', 'bookmarkedKana', 'kanaStats', 'srsItems', 'badges',
+          'cultureCards', 'gameRecords', 'studyLogs', 'dailyMissions',
+          'missionSettings', 'praiseMessages', 'acknowledgedPraiseIds',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'studentName', 'level', 'exp', 'targetLevel', 'subLevel',
+          'streak', 'lastStudyDate', 'streakDates', 'streakProtections',
+          'currentStageId', 'unlockedStages', 'completedStages',
+          'learnedKana', 'bookmarkedKana', 'kanaStats', 'srsItems', 'badges',
+          'cultureCards', 'gameRecords', 'studyLogs', 'dailyMissions',
+          'missionSettings', 'praiseMessages', 'acknowledgedPraiseIds',
+          'lastBackupAt', 'startDate', 'createdAt', 'updatedAt'
+        ])
+        && data.uid is string && data.uid == studentUid && isValidId(data.uid)
+        && data.studentName is string && data.studentName.size() >= 1 && data.studentName.size() <= 40
+        && data.level is number && data.level >= 1 && data.level <= 200
+        && data.exp is number && data.exp >= 0 && data.exp <= 10000000
+        && data.targetLevel in ['STAGE0', 'N5', 'N4', 'N3', 'N2', 'N1']
+        && data.subLevel is number && data.subLevel >= 1 && data.subLevel <= 3
+        && data.streak is number && data.streak >= 0 && data.streak <= 3650
+        && (!('lastStudyDate' in data) || (data.lastStudyDate is string && data.lastStudyDate.size() <= 20))
+        && (!('streakDates' in data) || isValidStringList(data.streakDates, 366))
+        && (!('streakProtections' in data) || (data.streakProtections is number && data.streakProtections >= 0 && data.streakProtections <= 10))
+        && data.currentStageId is string && data.currentStageId.size() >= 1 && data.currentStageId.size() <= 64
+        && isValidStringList(data.unlockedStages, 100)
+        && isValidStringList(data.completedStages, 100)
+        && isValidStringList(data.learnedKana, 300)
+        && isValidStringList(data.bookmarkedKana, 300)
+        && data.kanaStats is map && data.kanaStats.size() <= 300
+        && data.srsItems is map && data.srsItems.size() <= 500
+        && isValidStringList(data.badges, 100)
+        && isValidStringList(data.cultureCards, 100)
+        && data.gameRecords is map && data.gameRecords.size() <= 20
+        && data.studyLogs is map && data.studyLogs.size() <= 400
+        && data.dailyMissions is map && data.dailyMissions.size() <= 20
+        && data.missionSettings is map && data.missionSettings.size() <= 20
+        && isValidPraiseList(data.praiseMessages)
+        && isValidStringList(data.acknowledgedPraiseIds, 100)
+        && (!('lastBackupAt' in data) || (data.lastBackupAt is string && data.lastBackupAt.size() <= 40))
+        && (!('startDate' in data) || (data.startDate is string && data.startDate.size() <= 20))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Collection: /admins/{adminUid}
+    match /admins/{adminUid} {
+      allow get: if isSignedIn() && isValidId(adminUid) && (isOwner(adminUid) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isAdmin()
+        && isValidId(adminUid)
+        && isValidAdminAccount(incoming(), adminUid)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(adminUid)
+        && isValidAdminAccount(incoming(), adminUid)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(adminUid);
+    }
+
+    // Collection: /adminSettings/{adminUid}
+    match /adminSettings/{adminUid} {
+      allow get: if isAdmin() && isValidId(adminUid) && isOwner(adminUid);
+      allow list: if false;
+      allow create: if isAdmin()
+        && isValidId(adminUid)
+        && isOwner(adminUid)
+        && isValidAdminConfig(incoming(), adminUid)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(adminUid)
+        && isOwner(adminUid)
+        && isValidAdminConfig(incoming(), adminUid)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // Collection: /students/{studentUid}
+    match /students/{studentUid} {
+      allow get: if isSignedIn() && isValidId(studentUid) && (isOwner(studentUid) || isAdmin());
+      allow list: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+
+      allow create: if isVerifiedUser()
+        && isValidId(studentUid)
+        && (isOwner(studentUid) || isAdmin())
+        && isValidStudentProgress(incoming(), studentUid)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(studentUid)
+        && isValidStudentProgress(incoming(), studentUid)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Tier 1: Admin Override (mission settings, praise, level assignment, bonus EXP, full management)
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'studentName', 'level', 'exp', 'targetLevel', 'subLevel',
+            'streak', 'lastStudyDate', 'streakDates', 'streakProtections',
+            'currentStageId', 'unlockedStages', 'completedStages',
+            'learnedKana', 'bookmarkedKana', 'kanaStats', 'srsItems',
+            'badges', 'cultureCards', 'gameRecords', 'studyLogs',
+            'dailyMissions', 'missionSettings', 'praiseMessages',
+            'acknowledgedPraiseIds', 'lastBackupAt', 'startDate', 'updatedAt'
+          ]))
+          ||
+          // Tier 2: Student Progress Sync (cannot alter admin missionSettings or praiseMessages)
+          (isOwner(studentUid) && incoming().diff(existing()).affectedKeys().hasOnly([
+            'studentName', 'level', 'exp', 'targetLevel', 'subLevel',
+            'streak', 'lastStudyDate', 'streakDates', 'streakProtections',
+            'currentStageId', 'unlockedStages', 'completedStages',
+            'learnedKana', 'bookmarkedKana', 'kanaStats', 'srsItems',
+            'badges', 'cultureCards', 'gameRecords', 'studyLogs',
+            'dailyMissions', 'acknowledgedPraiseIds', 'lastBackupAt',
+            'startDate', 'updatedAt'
+          ]))
+        );
+
+      allow delete: if isAdmin() && isValidId(studentUid);
+
+      // Subcollection: /students/{studentUid}/private/{docId} (PII Isolation)
+      match /private/{docId} {
+        allow get: if isSignedIn()
+          && isValidId(studentUid)
+          && isValidId(docId)
+          && docId == 'account'
+          && (isOwner(studentUid) || isAdmin())
+          && exists(/databases/$(database)/documents/students/$(studentUid));
+        allow list: if false;
+        allow create: if isVerifiedUser()
+          && isValidId(studentUid)
+          && isValidId(docId)
+          && docId == 'account'
+          && isOwner(studentUid)
+          && exists(/databases/$(database)/documents/students/$(studentUid))
+          && isValidStudentPrivateAccount(incoming(), studentUid)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser()
+          && isValidId(studentUid)
+          && isValidId(docId)
+          && docId == 'account'
+          && (isOwner(studentUid) || isAdmin())
+          && exists(/databases/$(database)/documents/students/$(studentUid))
+          && isValidStudentPrivateAccount(incoming(), studentUid)
+          && incoming().uid == existing().uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'updatedAt']);
+        allow delete: if isAdmin() && isValidId(studentUid) && isValidId(docId);
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "미라이 JLPT – にほんご 모험",
+  "description": "일본어를 처음 배우는 중학생을 위한 게임 모험형 JLPT N1 합격 학습 웹앱",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
