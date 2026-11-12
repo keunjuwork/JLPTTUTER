@@ -1,6 +1,14 @@
 import { ALL_KANA, HIRAGANA_BASIC, KATAKANA_BASIC } from '../data/kanaData';
 import { ADVENTURE_STAGES } from '../data/adventureRoadmapData';
-import { DEFAULT_PROFILE_EMOJI, DEFAULT_STUDENT_NAME, ShopItem, StudentState, WrongReasonTag } from '../types';
+import { PART1_TEXTBOOK_CODES, TEXTBOOK_BOOK1_CODES } from '../data/textbookCodes';
+import {
+  DEFAULT_PROFILE_EMOJI,
+  DEFAULT_STUDENT_NAME,
+  ShopItem,
+  StudentState,
+  TextbookCodeProgress,
+  WrongReasonTag
+} from '../types';
 
 const STORAGE_KEY = 'ari_jlpt_state_v1';
 const LEGACY_STORAGE_KEY = 'mirai_jlpt_state_v1';
@@ -225,6 +233,7 @@ export function createInitialStudentState(
       dailyGameExpCap: 100,
       breakReminderEnabled: true,
       breakReminderMinutes: 40,
+      textbookCompletionExp: 20,
       kanaDropTimeLimits: {
         easy: DEFAULT_KANA_DROP_TIME_LIMITS.easy,
         normal: DEFAULT_KANA_DROP_TIME_LIMITS.normal,
@@ -241,6 +250,7 @@ export function createInitialStudentState(
       }
     ],
     acknowledgedPraiseIds: [],
+    textbookProgress: {},
     lastBackupAt: '',
     startDate: today
   };
@@ -525,12 +535,38 @@ export function normalizeDailyState(state: StudentState): StudentState {
       dailyGameExpCap: state.missionSettings?.dailyGameExpCap ?? 100,
       breakReminderEnabled: state.missionSettings?.breakReminderEnabled ?? true,
       breakReminderMinutes: state.missionSettings?.breakReminderMinutes ?? 40,
+      textbookCompletionExp:
+        typeof state.missionSettings?.textbookCompletionExp === 'number' &&
+        !Number.isNaN(state.missionSettings.textbookCompletionExp)
+          ? Math.max(5, Math.min(200, state.missionSettings.textbookCompletionExp))
+          : 20,
       kanaDropTimeLimits: {
         easy: state.missionSettings?.kanaDropTimeLimits?.easy ?? DEFAULT_KANA_DROP_TIME_LIMITS.easy,
         normal: state.missionSettings?.kanaDropTimeLimits?.normal ?? DEFAULT_KANA_DROP_TIME_LIMITS.normal,
         hard: state.missionSettings?.kanaDropTimeLimits?.hard ?? DEFAULT_KANA_DROP_TIME_LIMITS.hard
       }
-    }
+    },
+    textbookProgress: (() => {
+      const src =
+        state.textbookProgress && typeof state.textbookProgress === 'object'
+          ? state.textbookProgress
+          : {};
+      const cleaned: Record<string, TextbookCodeProgress> = {};
+      for (const [key, val] of Object.entries(src)) {
+        if (!val || typeof val !== 'object') continue;
+        cleaned[key] = {
+          ...(typeof val.completedAt === 'string' && val.completedAt ? { completedAt: val.completedAt } : {}),
+          ...(typeof val.lastVisitedAt === 'string' && val.lastVisitedAt ? { lastVisitedAt: val.lastVisitedAt } : {}),
+          missions: {
+            listen: Boolean(val.missions?.listen),
+            write: Boolean(val.missions?.write),
+            game: Boolean(val.missions?.game),
+            review: Boolean(val.missions?.review)
+          }
+        };
+      }
+      return cleaned;
+    })()
   };
 
   // Reset daily counters if date changed
@@ -622,7 +658,11 @@ export function mergeStudentState(
     },
     kanaStats: parsed.kanaStats || {},
     srsItems: parsed.srsItems || {},
-    studyLogs: parsed.studyLogs || {}
+    studyLogs: parsed.studyLogs || {},
+    textbookProgress:
+      parsed.textbookProgress && typeof parsed.textbookProgress === 'object'
+        ? parsed.textbookProgress
+        : {}
   };
 
   return normalizeDailyState(merged);
@@ -869,6 +909,12 @@ export function evaluateBadges(state: StudentState): StudentState {
   if (state.unlockedStages.includes('stage_n5') || state.targetLevel !== 'STAGE0') {
     earned.add('badge_n5_challenger');
   }
+  if (
+    PART1_TEXTBOOK_CODES.length > 0 &&
+    PART1_TEXTBOOK_CODES.every((code) => Boolean(state.textbookProgress?.[code]?.completedAt))
+  ) {
+    earned.add('badge_textbook_part1');
+  }
 
   return {
     ...state,
@@ -884,6 +930,29 @@ export function getMissionCountSummary(state: StudentState): { completed: number
   if (m.gamesPlayed >= s.dailyGameMissions) completed++;
   if (m.reviewDone) completed++;
   return { completed, total: 3 };
+}
+
+export function getTextbookProgressSummary(state: StudentState): {
+  completedAll: number;
+  totalAll: number;
+  pctAll: number;
+  completedPart1: number;
+  totalPart1: number;
+  pctPart1: number;
+} {
+  const progress = state.textbookProgress || {};
+  const totalAll = TEXTBOOK_BOOK1_CODES.length;
+  const completedAll = TEXTBOOK_BOOK1_CODES.filter((e) => Boolean(progress[e.code]?.completedAt)).length;
+  const totalPart1 = PART1_TEXTBOOK_CODES.length;
+  const completedPart1 = PART1_TEXTBOOK_CODES.filter((code) => Boolean(progress[code]?.completedAt)).length;
+  return {
+    completedAll,
+    totalAll,
+    pctAll: totalAll > 0 ? Math.round((completedAll / totalAll) * 100) : 0,
+    completedPart1,
+    totalPart1,
+    pctPart1: totalPart1 > 0 ? Math.round((completedPart1 / totalPart1) * 100) : 0
+  };
 }
 
 export function getStage0ProgressPercent(state: StudentState): number {

@@ -1,7 +1,9 @@
 import React from 'react';
-import { Award, Download, Lock, Medal, Pencil, Sparkles, Type, Upload, X } from 'lucide-react';
+import { Award, BookOpen, Download, Lock, Medal, Pencil, Sparkles, Type, Upload, X } from 'lucide-react';
 import { BADGE_DEFS, CULTURE_CARDS } from '../data/cultureAndBadgesData';
 import { HIRAGANA_BASIC, KATAKANA_BASIC } from '../data/kanaData';
+import { TEXTBOOK_BOOK1_CODES } from '../data/textbookCodes';
+import { getTextbookProgressSummary } from '../lib/storage';
 import { CultureCard, FontSizeScale, MainTab, StudentState, StudySubTab } from '../types';
 
 interface RecordsViewProps {
@@ -9,6 +11,7 @@ interface RecordsViewProps {
   onNavigateFromBadge: (tab: MainTab, studySubTab?: StudySubTab) => void;
   onOpenProfileModal: () => void;
   onChangeFontSizeScale: (scale: FontSizeScale) => void;
+  onOpenTextbookCode: (code: string) => void;
   onExportJson: () => void;
   onImportJson: (raw: string) => void;
 }
@@ -18,6 +21,7 @@ export const RecordsView: React.FC<RecordsViewProps> = ({
   onNavigateFromBadge,
   onOpenProfileModal,
   onChangeFontSizeScale,
+  onOpenTextbookCode,
   onExportJson,
   onImportJson
 }) => {
@@ -39,6 +43,7 @@ export const RecordsView: React.FC<RecordsViewProps> = ({
 
   const learnedHira = HIRAGANA_BASIC.filter((k) => state.learnedKana.includes(k.char)).length;
   const learnedKata = KATAKANA_BASIC.filter((k) => state.learnedKana.includes(k.char)).length;
+  const textbookSummary = getTextbookProgressSummary(state);
 
   return (
     <div className="max-w-[1240px] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
@@ -230,7 +235,244 @@ export const RecordsView: React.FC<RecordsViewProps> = ({
         </div>
       </section>
 
-      {/* 3. Learned Kana Matrix */}
+      {/* 3. Textbook Progress Table (0단계 1권) */}
+      <section className="bg-white border-[3px] border-[#FFE1C2] rounded-[26px] p-6 space-y-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-11 h-11 rounded-2xl bg-[#FFF7EC] border-2 border-[#FFE1C2] text-[#FF6B57] flex items-center justify-center shrink-0">
+              <BookOpen className="w-6 h-6 stroke-[2.2]" />
+            </div>
+            <div>
+              <h2 className="text-lg font-extrabold text-[#2B2340]">
+                교재 진도 (0단계 1권)
+              </h2>
+              <p className="text-xs font-medium text-[#2B2340]/65 mt-0.5">
+                Part 1(H-A ~ H-TEST) 전체 완료 시 보너스 EXP와 「히라가나 교재 완주」 배지를 받아요!
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 tabular-nums">
+            <span className="px-3 py-1 rounded-full bg-[#FFF7EC] border border-[#FFE1C2] text-xs font-extrabold text-[#2B2340]">
+              Part 1: {textbookSummary.completedPart1}/{textbookSummary.totalPart1}과 ({textbookSummary.pctPart1}%)
+            </span>
+            <span className="px-3 py-1 rounded-full bg-[#2B2340] text-white text-xs font-extrabold">
+              전체 {textbookSummary.completedAll}/{textbookSummary.totalAll}과 ({textbookSummary.pctAll}%)
+            </span>
+          </div>
+        </div>
+
+        {/* Circular Progress & Metrics Card */}
+        <div className="bg-[#FFFDF9] border-2 border-[#FFE1C2] rounded-[22px] p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-5">
+          {/* Left: Overall Circular Progress Gauge */}
+          <div className="flex items-center gap-4 w-full sm:w-auto">
+            <div className="relative w-24 h-24 sm:w-28 sm:h-28 shrink-0 flex items-center justify-center">
+              <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100" aria-hidden="true">
+                {/* Background Track */}
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="40"
+                  fill="transparent"
+                  stroke="#FFEAD3"
+                  strokeWidth="9"
+                />
+                {/* Progress Arc */}
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="40"
+                  fill="transparent"
+                  stroke="#4CC38A"
+                  strokeWidth="9"
+                  strokeDasharray={251.327}
+                  strokeDashoffset={251.327 - (251.327 * textbookSummary.pctAll) / 100}
+                  strokeLinecap="round"
+                  className="transition-all duration-700 ease-out"
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-1">
+                <span className="text-sm sm:text-base font-black font-num text-[#2B2340] leading-none">
+                  <span className="text-[#4CC38A]">{textbookSummary.completedAll}</span>
+                  <span className="text-[#2B2340]/40 mx-0.5 font-bold">/</span>
+                  <span>{textbookSummary.totalAll}</span>
+                </span>
+                <span className="text-[11px] font-extrabold font-num text-[#4CC38A] mt-1 leading-none">
+                  {textbookSummary.pctAll}%
+                </span>
+                <span className="text-[9px] font-bold text-[#2B2340]/55 mt-0.5">
+                  단원 완료
+                </span>
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#4CC38A]/15 text-[11px] font-extrabold text-[#1E6E4A]">
+                <span>전체 교재 완주율</span>
+              </div>
+              <div className="text-sm sm:text-base font-extrabold text-[#2B2340] mt-1 tabular-nums">
+                총 {textbookSummary.totalAll}개 단원 중 <strong className="text-[#4CC38A]">{textbookSummary.completedAll}개</strong> 완료
+              </div>
+              <div className="text-xs font-semibold text-[#2B2340]/65 mt-0.5 tabular-nums">
+                {textbookSummary.totalAll - textbookSummary.completedAll > 0
+                  ? `앞으로 ${textbookSummary.totalAll - textbookSummary.completedAll}개 단원이 남았어요!`
+                  : '🎉 0단계 1권 모든 단원을 완주했어요!'}
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Part 1 Circular Progress & Milestone Pill */}
+          <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-3 sm:gap-5 border-t sm:border-t-0 sm:border-l-2 border-[#FFE1C2]/70 pt-3 sm:pt-0 sm:pl-5">
+            <div className="relative w-16 h-16 shrink-0 flex items-center justify-center">
+              <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100" aria-hidden="true">
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="40"
+                  fill="transparent"
+                  stroke="#FFEAD3"
+                  strokeWidth="11"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="40"
+                  fill="transparent"
+                  stroke="#FF6B57"
+                  strokeWidth="11"
+                  strokeDasharray={251.327}
+                  strokeDashoffset={251.327 - (251.327 * textbookSummary.pctPart1) / 100}
+                  strokeLinecap="round"
+                  className="transition-all duration-700 ease-out"
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                <span className="text-xs font-black font-num text-[#2B2340] leading-none">
+                  {textbookSummary.pctPart1}%
+                </span>
+                <span className="text-[9px] font-extrabold text-[#FF6B57] mt-0.5">
+                  Part 1
+                </span>
+              </div>
+            </div>
+
+            <div className="min-w-0 text-left sm:text-right">
+              <div className="text-xs font-extrabold text-[#2B2340]">
+                히라가나 Part 1
+              </div>
+              <div className="text-xs font-bold text-[#FF6B57] tabular-nums mt-0.5">
+                {textbookSummary.completedPart1} / {textbookSummary.totalPart1}과 완료
+              </div>
+              <div className="text-[11px] font-semibold text-[#2B2340]/60 mt-0.5">
+                {textbookSummary.pctPart1 >= 100
+                  ? '🏅 배지 획득 완료'
+                  : '완료 시 +100 EXP 보너스'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Linear Bar Indicator */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-[11px] font-bold text-[#2B2340]/60 tabular-nums">
+            <span>0단계 1권 진도 바</span>
+            <span>{textbookSummary.completedAll} / {textbookSummary.totalAll} 과</span>
+          </div>
+          <div className="h-3 rounded-full bg-[#FFF3E3] overflow-hidden">
+            <div
+              className="h-full rounded-full bg-[#4CC38A] transition-all duration-500 ease-out"
+              style={{ width: `${Math.max(2, textbookSummary.pctAll)}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b-2 border-[#FFE1C2] text-[#2B2340]/65">
+                <th className="py-2 pr-3">코드</th>
+                <th className="py-2 pr-3">쪽</th>
+                <th className="py-2 pr-3">단원명</th>
+                <th className="py-2 pr-3">미션 현황</th>
+                <th className="py-2 pr-3">완료 상태</th>
+                <th className="py-2 text-right">이동</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#FFE1C2]/60 tabular-nums">
+              {TEXTBOOK_BOOK1_CODES.map((entry) => {
+                const prog = state.textbookProgress?.[entry.code];
+                const isDone = Boolean(prog?.completedAt);
+                const isUnlocked = state.unlockedStages.includes(entry.requiredStageId);
+                return (
+                  <tr key={entry.code}>
+                    <td className="py-2.5 pr-3 font-num font-extrabold text-[#FF6B57] whitespace-nowrap">
+                      {entry.code}
+                    </td>
+                    <td className="py-2.5 pr-3 font-num text-[#2B2340]/70 whitespace-nowrap">
+                      p.{entry.pages}
+                    </td>
+                    <td className="py-2.5 pr-3 font-bold text-[#2B2340] whitespace-nowrap">
+                      {entry.title}
+                    </td>
+                    <td className="py-2.5 pr-3">
+                      <div className="flex items-center gap-1">
+                        {entry.missions.map((m) => {
+                          const ok = Boolean(prog?.missions?.[m.key]);
+                          return (
+                            <span
+                              key={m.key}
+                              title={`${m.label}: ${ok ? '완료' : '미완료'}`}
+                              className={`w-6 h-6 rounded-lg inline-flex items-center justify-center text-[11px] font-bold ${
+                                ok
+                                  ? 'bg-[#4CC38A] text-white'
+                                  : 'bg-[#FFF7EC] border border-[#FFE1C2] text-[#2B2340]/45'
+                              }`}
+                            >
+                              {m.symbol}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </td>
+                    <td className="py-2.5 pr-3 whitespace-nowrap">
+                      {isDone ? (
+                        <span className="px-2.5 py-0.5 rounded-full bg-[#4CC38A]/15 text-[#1E6E4A] text-[11px] font-extrabold">
+                          완료 ({prog!.completedAt!.slice(0, 10)})
+                        </span>
+                      ) : !isUnlocked ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#E8E3EF] text-[#2B2340]/60 text-[11px] font-bold">
+                          <Lock className="w-3 h-3" />
+                          잠김
+                        </span>
+                      ) : prog ? (
+                        <span className="px-2.5 py-0.5 rounded-full bg-[#FFF3CC] text-[#7A4F01] text-[11px] font-bold">
+                          학습 중
+                        </span>
+                      ) : (
+                        <span className="text-[#2B2340]/45 text-[11px] font-semibold">시작 전</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => onOpenTextbookCode(entry.code)}
+                        className={`px-3 py-1 rounded-full text-[11px] font-extrabold cursor-pointer ${
+                          isUnlocked
+                            ? 'bg-[#2B2340] hover:bg-[#3f345d] text-white'
+                            : 'bg-[#F4F1F7] text-[#2B2340]/55 hover:bg-[#E8E3EF]'
+                        }`}
+                      >
+                        열기
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* 4. Learned Kana Matrix */}
       <section className="bg-white border-[3px] border-[#FFE1C2] rounded-[26px] p-6 space-y-4">
         <div className="flex items-center gap-2">
           <Award className="w-5 h-5 text-[#4CC38A]" />

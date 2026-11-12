@@ -374,6 +374,14 @@ export interface DailyMissionsState {
   routineReading: boolean;
 }
 
+export type TextbookMissionKey = 'listen' | 'write' | 'game' | 'review';
+
+export interface TextbookCodeProgress {
+  completedAt?: string;
+  lastVisitedAt?: string;
+  missions: Record<TextbookMissionKey, boolean>;
+}
+
 export interface MissionSettings {
   dailyNewChars: number;
   dailyGameMissions: number;
@@ -382,6 +390,7 @@ export interface MissionSettings {
   dailyGameExpCap: number;
   breakReminderEnabled: boolean;
   breakReminderMinutes: number;
+  textbookCompletionExp: number;
   kanaDropTimeLimits: {
     easy: number;
     normal: number;
@@ -474,6 +483,7 @@ export interface StudentState {
   missionSettings: MissionSettings;
   praiseMessages: PraiseMessage[];
   acknowledgedPraiseIds: string[];
+  textbookProgress: Record<string, TextbookCodeProgress>;
   lastBackupAt: string;
   startDate: string;
 }

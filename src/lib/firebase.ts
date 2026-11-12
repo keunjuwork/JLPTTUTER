@@ -18,7 +18,12 @@ import {
   updateDoc
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { DEFAULT_PROFILE_EMOJI, DEFAULT_STUDENT_NAME, StudentState } from '../types';
+import {
+  DEFAULT_PROFILE_EMOJI,
+  DEFAULT_STUDENT_NAME,
+  StudentState,
+  TextbookCodeProgress
+} from '../types';
 import {
   DEFAULT_KANA_DROP_TIME_LIMITS,
   DEFAULT_SHOP_CATALOG,
@@ -107,24 +112,8 @@ export async function signOutGoogle(): Promise<void> {
 
 export async function checkIsAdmin(user: User | null): Promise<boolean> {
   if (!user || !user.emailVerified) return false;
+  // Fallback check for bootstrapped admin email
   if (user.email === BOOTSTRAPPED_ADMIN_EMAIL) {
-    const adminPath = `admins/${user.uid}`;
-    try {
-      const ref = doc(db, 'admins', user.uid);
-      const snap = await getDoc(ref);
-      if (!snap.exists()) {
-        await setDoc(ref, {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName || '관리자',
-          role: 'admin',
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-      }
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, adminPath);
-    }
     return true;
   }
 
@@ -134,6 +123,7 @@ export async function checkIsAdmin(user: User | null): Promise<boolean> {
     return snap.exists();
   } catch (err) {
     handleFirestoreError(err, OperationType.GET, adminPath);
+    return false;
   }
 }
 
@@ -209,18 +199,47 @@ function sanitizeStudentPayload(state: StudentState, uid: string) {
     },
     studyLogs: state.studyLogs || {},
     dailyMissions: state.dailyMissions || {},
-    missionSettings: state.missionSettings || {
-      dailyNewChars: 5,
-      dailyGameMissions: 1,
-      autoWeakReview: true,
-      dailyMinutesGoal: 15,
-      dailyGameExpCap: 100,
-      breakReminderEnabled: true,
-      breakReminderMinutes: 40,
-      kanaDropTimeLimits: { ...DEFAULT_KANA_DROP_TIME_LIMITS }
+    missionSettings: {
+      dailyNewChars: Math.max(1, Math.min(20, Number(state.missionSettings?.dailyNewChars ?? 5))),
+      dailyGameMissions: Math.max(1, Math.min(5, Number(state.missionSettings?.dailyGameMissions ?? 1))),
+      autoWeakReview: Boolean(state.missionSettings?.autoWeakReview ?? true),
+      dailyMinutesGoal: Math.max(5, Math.min(180, Number(state.missionSettings?.dailyMinutesGoal ?? 15))),
+      dailyGameExpCap: Math.max(0, Math.min(500, Number(state.missionSettings?.dailyGameExpCap ?? 100))),
+      breakReminderEnabled: Boolean(state.missionSettings?.breakReminderEnabled ?? true),
+      breakReminderMinutes: Math.max(10, Math.min(120, Number(state.missionSettings?.breakReminderMinutes ?? 40))),
+      textbookCompletionExp: Math.max(5, Math.min(200, Number(state.missionSettings?.textbookCompletionExp ?? 20))),
+      kanaDropTimeLimits: {
+        easy: state.missionSettings?.kanaDropTimeLimits?.easy ?? DEFAULT_KANA_DROP_TIME_LIMITS.easy,
+        normal: state.missionSettings?.kanaDropTimeLimits?.normal ?? DEFAULT_KANA_DROP_TIME_LIMITS.normal,
+        hard: state.missionSettings?.kanaDropTimeLimits?.hard ?? DEFAULT_KANA_DROP_TIME_LIMITS.hard
+      }
     },
     praiseMessages: (state.praiseMessages || []).slice(-50),
     acknowledgedPraiseIds: (state.acknowledgedPraiseIds || []).slice(-100),
+    textbookProgress: (() => {
+      const out: Record<string, TextbookCodeProgress> = {};
+      const entries = Object.entries(state.textbookProgress || {}).slice(0, 200);
+      for (const [k, v] of entries) {
+        const cleanKey = k.trim().slice(0, 32);
+        if (!cleanKey || !v || typeof v !== 'object') continue;
+        const item: TextbookCodeProgress = {
+          missions: {
+            listen: Boolean(v.missions?.listen),
+            write: Boolean(v.missions?.write),
+            game: Boolean(v.missions?.game),
+            review: Boolean(v.missions?.review)
+          }
+        };
+        if (typeof v.completedAt === 'string' && v.completedAt) {
+          item.completedAt = v.completedAt.slice(0, 40);
+        }
+        if (typeof v.lastVisitedAt === 'string' && v.lastVisitedAt) {
+          item.lastVisitedAt = v.lastVisitedAt.slice(0, 40);
+        }
+        out[cleanKey] = item;
+      }
+      return out;
+    })(),
     lastBackupAt: (state.lastBackupAt || '').slice(0, 40),
     startDate: (state.startDate || '').slice(0, 20)
   };

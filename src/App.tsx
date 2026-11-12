@@ -7,6 +7,8 @@ import { BreakReminderModal } from './components/BreakReminderModal';
 import { DiagnosticTestModal } from './components/DiagnosticTestModal';
 import { GameZoneView } from './components/GameZoneView';
 import { HomeView } from './components/HomeView';
+import { InAppBrowserBanner } from './components/InAppBrowserBanner';
+import { InAppBrowserModal } from './components/InAppBrowserModal';
 import { LearningLabView } from './components/LearningLabView';
 import { PracticeSubTab, PracticeView } from './components/PracticeView';
 import { PrintCenterView } from './components/PrintCenterView';
@@ -14,9 +16,11 @@ import { ProfileSetupModal } from './components/ProfileSetupModal';
 import { RecordsView } from './components/RecordsView';
 import { ShopView } from './components/ShopView';
 import { StudentHeader } from './components/StudentHeader';
+import { TextbookGuideBanner } from './components/TextbookGuideBanner';
 import { ADVENTURE_STAGES } from './data/adventureRoadmapData';
 import { CULTURE_CARDS } from './data/cultureAndBadgesData';
 import { DiagnosticEvaluation } from './data/diagnosticTestData';
+import { findTextbookCode, PART1_TEXTBOOK_CODES, TextbookCodeEntry } from './data/textbookCodes';
 import { useActiveStudyTimer } from './hooks/useActiveStudyTimer';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import {
@@ -31,7 +35,12 @@ import {
   signInWithGoogle,
   signOutGoogle
 } from './lib/firebase';
-import { playSfx } from './lib/speech';
+import {
+  attemptAutoExternalBrowserOpen,
+  detectInAppBrowser,
+  InAppBrowserInfo
+} from './lib/inAppBrowser';
+import { playSfx, subscribeSoundAttempt, subscribeSpeechPlay } from './lib/speech';
 import {
   createInitialStudentState,
   createSamplePopulatedState,
@@ -67,13 +76,19 @@ import {
   StudentState,
   StudySubTab,
   SubDifficulty,
+  TextbookCodeProgress,
+  TextbookMissionKey,
   ToastItem,
   WrongNoteEntry,
   WrongReasonTag
 } from './types';
 
+const PENDING_CODE_STORAGE_KEY = 'ari_pending_textbook_code_v1';
+
 export default function App() {
   const [state, setState] = React.useState<StudentState>(() => loadLocalStudentState());
+  const stateRef = React.useRef(state);
+  stateRef.current = state;
   const [profileModalMode, setProfileModalMode] = React.useState<'onboarding' | 'edit' | null>(() =>
     state.profileConfigured ? null : 'onboarding'
   );
@@ -115,6 +130,22 @@ export default function App() {
   }>({ nonce: 0 });
   const backupToastShownRef = React.useRef(false);
   const gameCapToastDateRef = React.useRef('');
+
+  // Textbook Code Deep-Link & Guide State
+  const [authReady, setAuthReady] = React.useState(false);
+  const [activeTextbookCode, setActiveTextbookCode] = React.useState<string | null>(null);
+  const [textbookQuizTrigger, setTextbookQuizTrigger] = React.useState<{
+    nonce: number;
+    mode: 'row' | 'hiragana_review';
+  }>({ nonce: 0, mode: 'row' });
+  const quizTriggerCounterRef = React.useRef(0);
+
+  // In-App Browser (KakaoTalk, Naver, Instagram, LINE, etc.) State
+  const [inAppInfo] = React.useState<InAppBrowserInfo>(() => detectInAppBrowser());
+  const [inAppModalOpen, setInAppModalOpen] = React.useState(false);
+  const [inAppBannerDismissed, setInAppBannerDismissed] = React.useState(false);
+  const [urlCopied, setUrlCopied] = React.useState(false);
+  const lastSoundWarningAtRef = React.useRef(0);
 
   // Toasts
   const [toasts, setToasts] = React.useState<ToastItem[]>([]);
@@ -159,11 +190,13 @@ export default function App() {
         setAdminMode(false);
         setCloudSyncStatus('idle');
         cloudHydratedRef.current = false;
+        setAuthReady(true);
         return;
       }
 
       if (!navigator.onLine) {
         setCloudSyncStatus('idle');
+        setAuthReady(true);
         return;
       }
 
@@ -220,12 +253,111 @@ export default function App() {
         }
       } catch {
         setCloudSyncStatus(navigator.onLine ? 'error' : 'idle');
+      } finally {
+        setAuthReady(true);
       }
     });
 
     return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Capture initial ?code=... QR/URL parameter on mount and keep URL clean
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const rawCode = url.searchParams.get('code');
+    if (rawCode !== null) {
+      const trimmed = rawCode.trim();
+      if (trimmed) {
+        try {
+          sessionStorage.setItem(PENDING_CODE_STORAGE_KEY, trimmed);
+        } catch {
+          // ignore sessionStorage failures
+        }
+      }
+      url.searchParams.delete('code');
+      const cleanSearch = url.searchParams.toString();
+      const cleanUrl = `${url.pathname}${cleanSearch ? `?${cleanSearch}` : ''}${url.hash}`;
+      window.history.replaceState({}, '', cleanUrl);
+    }
+  }, []);
+
+  // In-App Browser Auto-Escape Attempt (Attempt once on mount; open guidance modal if still inside)
+  React.useEffect(() => {
+    if (!inAppInfo.isInApp) return;
+
+    // Attempt auto-redirect to default browser (Kakao custom scheme, LINE query, Android Chrome intent)
+    const attempted = attemptAutoExternalBrowserOpen(inAppInfo);
+
+    // If auto-transition is not supported (iOS Instagram/Naver etc.) or if the app remains in view
+    // show the guide modal after a short delay so user knows why sound is not playing.
+    const modalTimer = setTimeout(() => {
+      setInAppModalOpen(true);
+    }, attempted ? 1200 : 400);
+
+    return () => clearTimeout(modalTimer);
+  }, [inAppInfo]);
+
+  // Helper to copy current full URL (with query ?code=... intact) to clipboard
+  const handleCopyCurrentUrl = React.useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const currentHref = window.location.href;
+    const fallbackCopy = () => {
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = currentHref;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        textArea.remove();
+        setUrlCopied(true);
+        setTimeout(() => setUrlCopied(false), 2500);
+        notify('복사했어요. Safari나 Chrome에 붙여 넣어 주세요', 'success');
+      } catch {
+        notify('복사가 막혔어요. 모달의 주소를 길게 눌러 복사해 주세요.', 'warning');
+      }
+    };
+
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard
+        .writeText(currentHref)
+        .then(() => {
+          setUrlCopied(true);
+          setTimeout(() => setUrlCopied(false), 2500);
+          notify('복사했어요. Safari나 Chrome에 붙여 넣어 주세요', 'success');
+        })
+        .catch(() => {
+          fallbackCopy();
+        });
+    } else {
+      fallbackCopy();
+    }
+  }, [notify]);
+
+  // Listen to sound/speech playback attempts: in in-app browsers, warn user if sound might fail
+  React.useEffect(() => {
+    if (!inAppInfo.isInApp) return;
+
+    return subscribeSoundAttempt(() => {
+      const now = Date.now();
+      // Throttle sound warning toast so it doesn't spam (once every 12 seconds)
+      if (now - lastSoundWarningAtRef.current > 12000) {
+        lastSoundWarningAtRef.current = now;
+        notify(
+          '앱 안에서는 소리가 나지 않을 수 있어요. 다른 브라우저로 열어 주세요',
+          'warning',
+          {
+            actionLabel: '열기 방법 보기',
+            onAction: () => setInAppModalOpen(true)
+          }
+        );
+      }
+    });
+  }, [inAppInfo.isInApp, notify]);
 
   // 0.7s Debounced Cloud Sync (queues locally when offline)
   React.useEffect(() => {
@@ -264,8 +396,6 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [state, firebaseUser, isGoogleAdmin, adminMode, adminSelectedUid, isOnline]);
 
-  const stateRef = React.useRef(state);
-  stateRef.current = state;
   const reconnectFlushInFlightRef = React.useRef(false);
 
   // Flush pending cloud sync automatically upon returning online
@@ -362,6 +492,16 @@ export default function App() {
   }, [activeTab, adminMode, state.gameExpToday, state.gameExpDate, state.missionSettings?.dailyGameExpCap, notify]);
 
   const handleGoogleLogin = async () => {
+    // In-app browsers often block OAuth popups or fail redirect cookies; guide user to native browser
+    if (inAppInfo.isInApp) {
+      setInAppModalOpen(true);
+      notify(
+        `[${inAppInfo.appName || '앱 안 브라우저'}]에서는 Google 로그인이 차단될 수 있어요. Safari나 Chrome으로 열어 주세요.`,
+        'warning'
+      );
+      return;
+    }
+
     try {
       await signInWithGoogle();
     } catch {
@@ -390,6 +530,7 @@ export default function App() {
     if (opts?.rowId) setSelectedRowId(opts.rowId);
     if (opts?.printSubTab) setPrintSubTab(opts.printSubTab);
     if (opts?.pairId) setPrintPairId(opts.pairId);
+    setTextbookQuizTrigger((prev) => (prev.nonce === 0 ? prev : { nonce: 0, mode: 'row' }));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -414,8 +555,213 @@ export default function App() {
         setSelectedRowId(stage.rowId);
       }
     }
+    setTextbookQuizTrigger((prev) => (prev.nonce === 0 ? prev : { nonce: 0, mode: 'row' }));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // Textbook Code Mission, Navigation & Completion Handlers
+  const markTextbookMission = React.useCallback(
+    (code: string, key: TextbookMissionKey, mode: 'set' | 'toggle' = 'set') => {
+      setState((prev) => {
+        const existing: TextbookCodeProgress = prev.textbookProgress?.[code] || {
+          missions: { listen: false, write: false, game: false, review: false }
+        };
+        const currentVal = Boolean(existing.missions?.[key]);
+        const nextVal = mode === 'toggle' ? !currentVal : true;
+        if (nextVal === currentVal) return prev;
+        const nextEntry: TextbookCodeProgress = {
+          missions: {
+            listen: Boolean(existing.missions?.listen),
+            write: Boolean(existing.missions?.write),
+            game: Boolean(existing.missions?.game),
+            review: Boolean(existing.missions?.review),
+            [key]: nextVal
+          },
+          ...(existing.completedAt ? { completedAt: existing.completedAt } : {}),
+          ...(existing.lastVisitedAt ? { lastVisitedAt: existing.lastVisitedAt } : {})
+        };
+        return {
+          ...prev,
+          textbookProgress: {
+            ...(prev.textbookProgress || {}),
+            [code]: nextEntry
+          }
+        };
+      });
+    },
+    []
+  );
+
+  const navigateToTextbookEntry = React.useCallback((entry: TextbookCodeEntry) => {
+    setActiveTextbookCode(entry.code);
+    const nowIso = new Date().toISOString();
+    setState((prev) => {
+      const existing = prev.textbookProgress?.[entry.code];
+      const nextEntry: TextbookCodeProgress = {
+        missions: {
+          listen: Boolean(existing?.missions?.listen),
+          write: Boolean(existing?.missions?.write),
+          game: Boolean(existing?.missions?.game),
+          review: Boolean(existing?.missions?.review)
+        },
+        ...(existing?.completedAt ? { completedAt: existing.completedAt } : {}),
+        lastVisitedAt: nowIso
+      };
+      return {
+        ...prev,
+        textbookProgress: {
+          ...(prev.textbookProgress || {}),
+          [entry.code]: nextEntry
+        }
+      };
+    });
+
+    setActiveTab(entry.target.tab);
+    if (entry.target.studySubTab) {
+      setStudySubTab(entry.target.studySubTab);
+    }
+    if (entry.target.rowId) {
+      setSelectedRowId(entry.target.rowId);
+    }
+    setResumeTarget({
+      kanaChar: entry.target.kanaChar,
+      nonce: Date.now()
+    });
+    if (entry.target.openStageQuiz) {
+      quizTriggerCounterRef.current += 1;
+      setTextbookQuizTrigger({
+        nonce: quizTriggerCounterRef.current,
+        mode: entry.target.quizMode || 'row'
+      });
+    } else {
+      setTextbookQuizTrigger((prev) => (prev.nonce === 0 ? prev : { nonce: 0, mode: 'row' }));
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const handleApplyTextbookCode = React.useCallback(
+    (rawInput: string): boolean => {
+      const entry = findTextbookCode(rawInput);
+      if (!entry) {
+        notify('코드를 찾을 수 없어요. 교재 오른쪽 아래 QR 옆 코드를 확인해 보세요.', 'warning');
+        return false;
+      }
+      const curState = stateRef.current;
+      if (!curState.unlockedStages.includes(entry.requiredStageId)) {
+        notify('아직 열리지 않은 단계예요. 앞 단계를 먼저 끝내요.', 'warning');
+        return false;
+      }
+      if (adminMode) {
+        setAdminMode(false);
+      }
+      navigateToTextbookEntry(entry);
+      if (entry.fallbackNotice) {
+        notify(`교재 p.${entry.pages} · ${entry.code} (${entry.title}) — ${entry.fallbackNotice}`, 'info');
+      } else {
+        notify(`교재 p.${entry.pages} · ${entry.code} (${entry.title}) 과로 이동했어요!`, 'success');
+      }
+      return true;
+    },
+    [adminMode, navigateToTextbookEntry, notify]
+  );
+
+  const handleCompleteTextbookCode = React.useCallback(
+    (code: string) => {
+      const cur = stateRef.current;
+      const entry = findTextbookCode(code);
+      if (!entry) return;
+      if (cur.textbookProgress?.[code]?.completedAt) {
+        notify('이미 완료한 단원이에요! (중복 EXP는 지급되지 않아요)', 'info');
+        return;
+      }
+
+      const nowIso = new Date().toISOString();
+      const expGain = cur.missionSettings?.textbookCompletionExp ?? 20;
+      const wasPart1Done =
+        PART1_TEXTBOOK_CODES.length > 0 &&
+        PART1_TEXTBOOK_CODES.every((c) => Boolean(cur.textbookProgress?.[c]?.completedAt));
+
+      const nextPart1Done =
+        PART1_TEXTBOOK_CODES.length > 0 &&
+        PART1_TEXTBOOK_CODES.every(
+          (c) => c === code || Boolean(cur.textbookProgress?.[c]?.completedAt)
+        );
+      const part1BonusExp = !wasPart1Done && nextPart1Done ? 100 : 0;
+
+      setState((prev) => {
+        if (prev.textbookProgress?.[code]?.completedAt) return prev;
+        const prevExisting = prev.textbookProgress?.[code];
+        const nextEntry: TextbookCodeProgress = {
+          missions: {
+            listen: Boolean(prevExisting?.missions?.listen),
+            write: Boolean(prevExisting?.missions?.write),
+            game: Boolean(prevExisting?.missions?.game),
+            review: Boolean(prevExisting?.missions?.review)
+          },
+          completedAt: nowIso,
+          lastVisitedAt: prevExisting?.lastVisitedAt || nowIso
+        };
+        const next = recordStudyActivity(
+          {
+            ...prev,
+            textbookProgress: {
+              ...(prev.textbookProgress || {}),
+              [code]: nextEntry
+            }
+          },
+          {
+            expGain: expGain + part1BonusExp,
+            studyMinutes: 0
+          }
+        );
+        return withSyncedMissionLog(next);
+      });
+
+      playSfx(part1BonusExp > 0 ? 'levelup' : 'correct');
+      if (part1BonusExp > 0) {
+        notify(
+          `🎉 0단계 1권 Part 1 완주! +${expGain} EXP + 보너스 +100 EXP & '히라가나 교재 완주' 배지를 획득했어요!`,
+          'success'
+        );
+      } else {
+        notify(`교재 p.${entry.pages} · ${entry.code} (${entry.title}) 완료! (+${expGain} EXP)`, 'success');
+      }
+    },
+    [notify, withSyncedMissionLog]
+  );
+
+  // Consume pending ?code=... URL parameter once auth, onboarding & diagnostic test finish
+  React.useEffect(() => {
+    if (!authReady || profileModalMode || diagnosticOpen || adminMode) return;
+    let pending = '';
+    try {
+      pending = sessionStorage.getItem(PENDING_CODE_STORAGE_KEY) || '';
+      if (pending) {
+        sessionStorage.removeItem(PENDING_CODE_STORAGE_KEY);
+      }
+    } catch {
+      return;
+    }
+    if (pending) {
+      handleApplyTextbookCode(pending);
+    }
+  }, [authReady, profileModalMode, diagnosticOpen, adminMode, handleApplyTextbookCode]);
+
+  // Auto-mark Textbook Mission #1 (listen) on Japanese audio playback
+  React.useEffect(() => {
+    if (!activeTextbookCode || adminMode) return;
+    return subscribeSpeechPlay(() => {
+      markTextbookMission(activeTextbookCode, 'listen', 'set');
+    });
+  }, [activeTextbookCode, adminMode, markTextbookMission]);
+
+  // Auto-mark Textbook Mission #4 (review) when entering SRS review tab
+  React.useEffect(() => {
+    if (!activeTextbookCode || adminMode) return;
+    if (activeTab === 'study' && studySubTab === 'srs') {
+      markTextbookMission(activeTextbookCode, 'review', 'set');
+    }
+  }, [activeTextbookCode, activeTab, studySubTab, adminMode, markTextbookMission]);
 
   const handleChangeLevelScope = (level: JlptLevel, subLevel: SubDifficulty) => {
     setState((prev) => evaluateBadges({ ...prev, targetLevel: level, subLevel }));
@@ -600,9 +946,28 @@ export default function App() {
         nextGamesPlayed >= prev.missionSettings.dailyGameMissions;
       const requestedExp = Math.max(15, Math.round(score / 40)) + (hitMission ? 30 : 0);
 
+      let updatedTextbookProgress = prev.textbookProgress;
+      if (activeTextbookCode) {
+        const existing = prev.textbookProgress?.[activeTextbookCode];
+        updatedTextbookProgress = {
+          ...(prev.textbookProgress || {}),
+          [activeTextbookCode]: {
+            missions: {
+              listen: Boolean(existing?.missions?.listen),
+              write: Boolean(existing?.missions?.write),
+              game: true,
+              review: Boolean(existing?.missions?.review)
+            },
+            ...(existing?.completedAt ? { completedAt: existing.completedAt } : {}),
+            ...(existing?.lastVisitedAt ? { lastVisitedAt: existing.lastVisitedAt } : {})
+          }
+        };
+      }
+
       const next = recordStudyActivity(
         {
           ...prev,
+          textbookProgress: updatedTextbookProgress,
           gameRecords: {
             ...prev.gameRecords,
             kanaDropBest: Math.max(prev.gameRecords.kanaDropBest, score),
@@ -1183,6 +1548,7 @@ export default function App() {
         nonce: Date.now()
       });
     }
+    setTextbookQuizTrigger((prev) => (prev.nonce === 0 ? prev : { nonce: 0, mode: 'row' }));
     notify(`「${loc.label}」으로 바로 이동했어요!`, 'info');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -1296,6 +1662,14 @@ export default function App() {
   const todayKey = getTodayKey();
   const activeMinutesToday =
     (state.studyLogs[todayKey]?.studyMinutes || 0) + (state.studyLogs[todayKey]?.gameMinutes || 0);
+  const activeTextbookEntry = activeTextbookCode ? findTextbookCode(activeTextbookCode) : null;
+  const isOnActiveTextbookScreen = Boolean(
+    activeTextbookEntry &&
+      activeTab === activeTextbookEntry.target.tab &&
+      (!activeTextbookEntry.target.studySubTab ||
+        studySubTab === activeTextbookEntry.target.studySubTab) &&
+      (!activeTextbookEntry.target.rowId || selectedRowId === activeTextbookEntry.target.rowId)
+  );
 
   return (
     <div className="min-h-screen bg-[#FFF7EC] text-[#2B2340]">
@@ -1365,6 +1739,13 @@ export default function App() {
         />
       ) : (
         <>
+          {inAppInfo.isInApp && !inAppBannerDismissed && (
+            <InAppBrowserBanner
+              info={inAppInfo}
+              onOpenModal={() => setInAppModalOpen(true)}
+            />
+          )}
+
           <StudentHeader
             activeTab={activeTab}
             onSelectTab={(tab) => handleNavigateTab(tab)}
@@ -1382,7 +1763,23 @@ export default function App() {
             onGoogleLogout={handleGoogleLogout}
             onOpenProfileModal={() => setProfileModalMode('edit')}
             onOpenAdminGate={() => setAdminGateOpen(true)}
+            onApplyTextbookCode={handleApplyTextbookCode}
           />
+
+          {activeTextbookEntry && (
+            <TextbookGuideBanner
+              entry={activeTextbookEntry}
+              progress={state.textbookProgress?.[activeTextbookEntry.code]}
+              completionExp={state.missionSettings?.textbookCompletionExp ?? 20}
+              isOnTargetScreen={isOnActiveTextbookScreen}
+              onToggleMission={(key) => markTextbookMission(activeTextbookEntry.code, key, 'toggle')}
+              onCompleteUnit={() => handleCompleteTextbookCode(activeTextbookEntry.code)}
+              onJumpToUnit={() => navigateToTextbookEntry(activeTextbookEntry)}
+              onJumpToGame={() => handleNavigateTab('game')}
+              onJumpToSrs={() => handleNavigateTab('study', { studySubTab: 'srs' })}
+              onClose={() => setActiveTextbookCode(null)}
+            />
+          )}
 
           <main className="pb-12">
             {activeTab === 'home' && (
@@ -1395,6 +1792,7 @@ export default function App() {
                 onAcknowledgePraise={handleAcknowledgePraise}
                 onTogglePlanTask={handleTogglePlanTask}
                 onResumeLastLocation={handleResumeLastLocation}
+                onApplyTextbookCode={handleApplyTextbookCode}
                 onNotify={notify}
               />
             )}
@@ -1408,6 +1806,8 @@ export default function App() {
                 initialVocabId={resumeTarget.vocabId}
                 initialKanjiId={resumeTarget.kanjiId}
                 initialGrammarId={resumeTarget.grammarId}
+                openQuizNonce={textbookQuizTrigger.nonce}
+                openQuizMode={textbookQuizTrigger.mode}
                 onChangeSubTab={setStudySubTab}
                 onSelectRow={setSelectedRowId}
                 onMarkKanaLearned={handleMarkKanaLearned}
@@ -1416,6 +1816,11 @@ export default function App() {
                 onCompleteStageQuiz={handleCompleteStageQuiz}
                 onCompleteSrsSession={handleCompleteSrsSession}
                 onCompleteSpeakingMission={handleCompleteSpeakingMission}
+                onTextbookWritingComplete={() => {
+                  if (activeTextbookCode && !adminMode) {
+                    markTextbookMission(activeTextbookCode, 'write', 'set');
+                  }
+                }}
                 onOpenPrintForPair={(pairId, tab) => {
                   setPrintPairId(pairId);
                   setPrintSubTab(tab);
@@ -1496,6 +1901,9 @@ export default function App() {
                 onNavigateFromBadge={(tab, sub) => handleNavigateTab(tab, { studySubTab: sub })}
                 onOpenProfileModal={() => setProfileModalMode('edit')}
                 onChangeFontSizeScale={handleChangeFontSizeScale}
+                onOpenTextbookCode={(code) => {
+                  handleApplyTextbookCode(code);
+                }}
                 onExportJson={handleExportJson}
                 onImportJson={handleImportJson}
               />
@@ -1559,6 +1967,19 @@ export default function App() {
           onClose={() => setAdminGateOpen(false)}
         />
       )}
+
+      {/* In-App Browser Guidance Modal (KakaoTalk, Naver, Instagram, LINE, etc.) */}
+      <InAppBrowserModal
+        info={inAppInfo}
+        isOpen={inAppModalOpen}
+        onClose={() => {
+          setInAppModalOpen(false);
+          // If closed with "그래도 계속하기", keep top warning banner visible
+          setInAppBannerDismissed(false);
+        }}
+        onCopyUrl={handleCopyCurrentUrl}
+        copied={urlCopied}
+      />
 
       {/* In-App Toast Stack (Replaces window.alert) */}
       <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 sm:px-0 print:hidden">

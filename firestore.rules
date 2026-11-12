@@ -37,9 +37,10 @@ service cloud.firestore {
       return isVerifiedUser() && request.auth.token.email == 'ai.kj1207@gmail.com';
     }
 
+    // Check user UID in the admins collection or bootstrapped admin credentials
     function isAdmin() {
       return isBootstrappedAdmin() || (
-        isVerifiedUser() &&
+        isSignedIn() &&
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }
@@ -108,7 +109,7 @@ service cloud.firestore {
           'shopCatalog', 'purchasedItems',
           'gameRecords', 'studyLogs', 'dailyMissions',
           'missionSettings', 'praiseMessages', 'acknowledgedPraiseIds',
-          'lastBackupAt', 'startDate', 'createdAt', 'updatedAt'
+          'textbookProgress', 'lastBackupAt', 'startDate', 'createdAt', 'updatedAt'
         ])
         && data.uid is string && data.uid == studentUid && isValidId(data.uid)
         && data.studentName is string && data.studentName.size() >= 1 && data.studentName.size() <= 40
@@ -154,28 +155,47 @@ service cloud.firestore {
         && data.missionSettings is map && data.missionSettings.size() <= 20
         && isValidMapList(data.praiseMessages, 50)
         && isValidStringList(data.acknowledgedPraiseIds, 100)
+        && (!('textbookProgress' in data) || (data.textbookProgress is map && data.textbookProgress.size() <= 200))
         && (!('lastBackupAt' in data) || (data.lastBackupAt is string && data.lastBackupAt.size() <= 40))
         && (!('startDate' in data) || (data.startDate is string && data.startDate.size() <= 20))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
 
-    // Collection: /admins/{adminUid}
+    function isValidWrongNote(data, expectedStudentUid, entryId) {
+      return data.keys().hasAll([
+          'id', 'studentUid', 'sourceType', 'level', 'title', 'prompt',
+          'options', 'correctIndex', 'pickedIndex', 'explanation', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'studentUid', 'sourceType', 'level', 'title', 'prompt',
+          'options', 'correctIndex', 'pickedIndex', 'explanation', 'reasonTag', 'createdAt', 'updatedAt'
+        ])
+        && data.id is string && data.id == entryId && isValidId(data.id)
+        && data.studentUid is string && data.studentUid == expectedStudentUid && isValidId(data.studentUid)
+        && data.sourceType in ['kana', 'game', 'reading', 'listening', 'mock', 'kanji', 'vocab']
+        && data.level in ['STAGE0', 'N5', 'N4', 'N3', 'N2', 'N1']
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
+        && data.prompt is string && data.prompt.size() >= 1 && data.prompt.size() <= 500
+        && data.options is list && data.options.size() <= 10
+        && data.correctIndex is number && data.correctIndex >= 0 && data.correctIndex <= 10
+        && data.pickedIndex is number && data.pickedIndex >= 0 && data.pickedIndex <= 10
+        && data.explanation is string && data.explanation.size() <= 1000
+        && (!('reasonTag' in data) || data.reasonTag in ['char_confusion', 'sound_confusion', 'meaning_unknown', 'mistake'])
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Collection: /admins/{adminUid} (Client Read-Only; Registrations strictly via Firebase Console or Admin SDK)
     match /admins/{adminUid} {
       allow get: if isSignedIn() && isValidId(adminUid) && (isOwner(adminUid) || isAdmin());
       allow list: if isAdmin();
-      allow create: if isAdmin()
-        && isValidId(adminUid)
-        && isValidAdminAccount(incoming(), adminUid)
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
-      allow update: if isAdmin()
-        && isValidId(adminUid)
-        && isValidAdminAccount(incoming(), adminUid)
-        && incoming().uid == existing().uid
-        && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time;
-      allow delete: if isAdmin() && isValidId(adminUid);
+      allow create, update, delete: if false;
+    }
+
+    // Collection: /aiUsage/{usageDocId} (Server-Only, Strictly Protected from all Client-Side Read or Write Access)
+    match /aiUsage/{usageDocId} {
+      allow read, write: if false;
     }
 
     // Collection: /adminSettings/{adminUid}
@@ -198,7 +218,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Collection: /students/{studentUid}
+    // Collection: /students/{studentUid} (Secured strictly to the owner UID or authorized Admin)
     match /students/{studentUid} {
       allow get: if isSignedIn() && isValidId(studentUid) && (isOwner(studentUid) || isAdmin());
       allow list: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
@@ -217,7 +237,7 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
-          // Tier 1: Admin Override (mission settings, praise, shop catalog, level assignment, bonus EXP/coins, operational settings, full management)
+          // Tier 1: Admin Override (mission settings, praise, shop catalog, level assignment, operational management)
           (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
             'studentName', 'profileEmoji', 'profileConfigured',
             'diagnosticCompleted', 'diagnosticResult',
@@ -234,7 +254,7 @@ service cloud.firestore {
             'shopCatalog', 'purchasedItems',
             'gameRecords', 'studyLogs', 'dailyMissions',
             'missionSettings', 'praiseMessages', 'acknowledgedPraiseIds',
-            'lastBackupAt', 'startDate', 'updatedAt'
+            'textbookProgress', 'lastBackupAt', 'startDate', 'updatedAt'
           ]))
           ||
           // Tier 2: Student Progress Sync (strictly owner-only, cannot alter admin missionSettings, praiseMessages, or shopCatalog)
@@ -252,13 +272,13 @@ service cloud.firestore {
             'kanaStats', 'srsItems', 'badges', 'cultureCards',
             'mockExamHistory', 'wrongNoteEntries', 'purchasedItems',
             'gameRecords', 'studyLogs', 'dailyMissions',
-            'acknowledgedPraiseIds', 'lastBackupAt', 'startDate', 'updatedAt'
+            'acknowledgedPraiseIds', 'textbookProgress', 'lastBackupAt', 'startDate', 'updatedAt'
           ]))
         );
 
       allow delete: if isAdmin() && isValidId(studentUid);
 
-      // Subcollection: /students/{studentUid}/private/{docId} (PII Isolation)
+      // Subcollection: /students/{studentUid}/private/{docId} (Isolated PII)
       match /private/{docId} {
         allow get: if isSignedIn()
           && isValidId(studentUid)
@@ -289,6 +309,63 @@ service cloud.firestore {
           && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'updatedAt']);
         allow delete: if isAdmin() && isValidId(studentUid) && isValidId(docId);
       }
+
+      // Subcollection: /students/{studentUid}/wrongNotes/{entryId} (Student Personal Wrong Notes)
+      match /wrongNotes/{entryId} {
+        allow get: if isSignedIn()
+          && isValidId(studentUid)
+          && isValidId(entryId)
+          && (isOwner(studentUid) || isAdmin());
+        allow list: if isSignedIn()
+          && isValidId(studentUid)
+          && (isOwner(studentUid) || isAdmin());
+        allow create: if isVerifiedUser()
+          && isValidId(studentUid)
+          && isValidId(entryId)
+          && isOwner(studentUid)
+          && isValidWrongNote(incoming(), studentUid, entryId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser()
+          && isValidId(studentUid)
+          && isValidId(entryId)
+          && isOwner(studentUid)
+          && isValidWrongNote(incoming(), studentUid, entryId)
+          && incoming().studentUid == existing().studentUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['reasonTag', 'updatedAt']);
+        allow delete: if isSignedIn()
+          && isValidId(studentUid)
+          && isValidId(entryId)
+          && (isOwner(studentUid) || isAdmin());
+      }
+    }
+
+    // Top-level Collection: /wrongNoteEntries/{entryId} (Users only have access to their own UID)
+    match /wrongNoteEntries/{entryId} {
+      allow get: if isSignedIn()
+        && isValidId(entryId)
+        && (isOwner(resource.data.studentUid) || isAdmin());
+      allow list: if isSignedIn()
+        && (resource.data.studentUid == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(entryId)
+        && incoming().studentUid == request.auth.uid
+        && isValidWrongNote(incoming(), request.auth.uid, entryId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(entryId)
+        && incoming().studentUid == request.auth.uid
+        && incoming().studentUid == existing().studentUid
+        && isValidWrongNote(incoming(), request.auth.uid, entryId)
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['reasonTag', 'updatedAt']);
+      allow delete: if isSignedIn()
+        && isValidId(entryId)
+        && (isOwner(resource.data.studentUid) || isAdmin());
     }
   }
 }

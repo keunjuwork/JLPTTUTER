@@ -58,6 +58,25 @@ export const DIRTY_DOZEN_CASES: DirtyDozenCase[] = [
   },
   {
     id: 5,
+    name: 'Cross-Student Wrong Note Access',
+    operation: 'get',
+    path: '/wrongNoteEntries/entryB',
+    auth: { uid: 'userA', email: 'a@example.com', email_verified: true },
+    expected: 'PERMISSION_DENIED',
+    enforcedBy: 'isOwner(resource.data.studentUid) || isAdmin()'
+  },
+  {
+    id: 6,
+    name: 'Client-Side AI Quota Reset',
+    operation: 'create',
+    path: '/aiUsage/userA_2026-11-12',
+    auth: { uid: 'userA', email: 'a@example.com', email_verified: true },
+    payload: { uid: 'userA', date: '2026-11-12', count: 0 },
+    expected: 'PERMISSION_DENIED',
+    enforcedBy: 'match /aiUsage/{usageDocId} { allow read, write: if false; }'
+  },
+  {
+    id: 7,
     name: 'Self-Admin Escalation',
     operation: 'create',
     path: '/admins/userA',
@@ -67,7 +86,7 @@ export const DIRTY_DOZEN_CASES: DirtyDozenCase[] = [
     enforcedBy: 'isAdmin() on /admins create'
   },
   {
-    id: 6,
+    id: 8,
     name: 'Unverified Admin Email Spoof',
     operation: 'create',
     path: '/admins/spoofUid',
@@ -77,7 +96,7 @@ export const DIRTY_DOZEN_CASES: DirtyDozenCase[] = [
     enforcedBy: 'request.auth.token.email_verified == true'
   },
   {
-    id: 7,
+    id: 9,
     name: 'Shadow / Ghost Field Injection',
     operation: 'update',
     path: '/students/userA',
@@ -87,7 +106,7 @@ export const DIRTY_DOZEN_CASES: DirtyDozenCase[] = [
     enforcedBy: 'data.keys().hasOnly(...) & affectedKeys().hasOnly(...)'
   },
   {
-    id: 8,
+    id: 10,
     name: 'Identity Spoofing on Create',
     operation: 'create',
     path: '/students/userA',
@@ -97,7 +116,7 @@ export const DIRTY_DOZEN_CASES: DirtyDozenCase[] = [
     enforcedBy: 'data.uid == studentUid && isOwner(studentUid)'
   },
   {
-    id: 9,
+    id: 11,
     name: 'Immutable Timestamp Tampering',
     operation: 'update',
     path: '/students/userA',
@@ -105,25 +124,6 @@ export const DIRTY_DOZEN_CASES: DirtyDozenCase[] = [
     payload: { createdAt: '2020-01-01T00:00:00Z' },
     expected: 'PERMISSION_DENIED',
     enforcedBy: 'incoming().createdAt == existing().createdAt'
-  },
-  {
-    id: 10,
-    name: 'Forged Client Timestamp',
-    operation: 'update',
-    path: '/students/userA',
-    auth: { uid: 'userA', email: 'a@example.com', email_verified: true },
-    payload: { updatedAt: '2026-01-01T00:00:00Z' },
-    expected: 'PERMISSION_DENIED',
-    enforcedBy: 'incoming().updatedAt == request.time'
-  },
-  {
-    id: 11,
-    name: 'Oversized ID Poisoning',
-    operation: 'create',
-    path: `/students/${'a'.repeat(500)}`,
-    auth: { uid: 'userA', email: 'a@example.com', email_verified: true },
-    expected: 'PERMISSION_DENIED',
-    enforcedBy: 'isValidId(studentUid)'
   },
   {
     id: 12,

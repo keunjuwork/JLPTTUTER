@@ -13,8 +13,48 @@ export function stopJapaneseSpeech(): void {
   }
 }
 
+const speechPlayListeners = new Set<() => void>();
+const soundAttemptListeners = new Set<() => void>();
+
+export function subscribeSpeechPlay(listener: () => void): () => void {
+  speechPlayListeners.add(listener);
+  return () => {
+    speechPlayListeners.delete(listener);
+  };
+}
+
+export function subscribeSoundAttempt(listener: () => void): () => void {
+  soundAttemptListeners.add(listener);
+  return () => {
+    soundAttemptListeners.delete(listener);
+  };
+}
+
+function notifySpeechPlay(): void {
+  speechPlayListeners.forEach((cb) => {
+    try {
+      cb();
+    } catch {
+      // ignore listener errors
+    }
+  });
+}
+
+function notifySoundAttempt(): void {
+  soundAttemptListeners.forEach((cb) => {
+    try {
+      cb();
+    } catch {
+      // ignore listener errors
+    }
+  });
+}
+
 export function speakJapanese(text: string, rate = 0.95, pitch = 1.05): void {
-  if (!isSpeechSynthesisSupported() || !text.trim()) return;
+  if (!text.trim()) return;
+  notifySoundAttempt();
+  notifySpeechPlay();
+  if (!isSpeechSynthesisSupported()) return;
   try {
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
@@ -38,6 +78,10 @@ export function speakJapanesePromise(
   rate = 0.95,
   pitch = 1.05
 ): Promise<void> {
+  if (text.trim()) {
+    notifySoundAttempt();
+    notifySpeechPlay();
+  }
   return new Promise((resolve) => {
     if (!isSpeechSynthesisSupported() || !text.trim()) {
       setTimeout(resolve, Math.min(2500, Math.max(700, text.length * 60)));
@@ -198,6 +242,7 @@ function getAudioCtx(): AudioContext | null {
 
 export function playSfx(kind: 'correct' | 'wrong' | 'levelup' | 'pop', muted = false): void {
   if (muted) return;
+  notifySoundAttempt();
   const ctx = getAudioCtx();
   if (!ctx) return;
 

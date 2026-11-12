@@ -236,6 +236,9 @@
         "acknowledgedPraiseIds": {
           "type": "array"
         },
+        "textbookProgress": {
+          "type": "object"
+        },
         "lastBackupAt": {
           "type": "string",
           "maxLength": 40
@@ -279,6 +282,106 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "WrongNoteDoc": {
+      "title": "WrongNoteDoc",
+      "description": "Student wrong answer review note record",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "studentUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "sourceType": {
+          "type": "string",
+          "enum": ["kana", "game", "reading", "listening", "mock", "kanji", "vocab"]
+        },
+        "level": {
+          "type": "string",
+          "enum": ["STAGE0", "N5", "N4", "N3", "N2", "N1"]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "prompt": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "options": {
+          "type": "array"
+        },
+        "correctIndex": {
+          "type": "number"
+        },
+        "pickedIndex": {
+          "type": "number"
+        },
+        "explanation": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "reasonTag": {
+          "type": "string",
+          "enum": ["char_confusion", "sound_confusion", "meaning_unknown", "mistake"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "studentUid",
+        "sourceType",
+        "level",
+        "title",
+        "prompt",
+        "options",
+        "correctIndex",
+        "pickedIndex",
+        "explanation",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AiUsageDoc": {
+      "title": "AiUsageDoc",
+      "description": "Server-side daily AI question quota tracking record",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "date": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "count": {
+          "type": "number"
+        },
+        "lastQuestionAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "date", "count", "lastQuestionAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -297,6 +400,18 @@
     "/students/{studentUid}/private/{docId}": {
       "schema": { "$ref": "#/entities/StudentPrivateAccount" },
       "description": "Student isolated PII account metadata"
+    },
+    "/students/{studentUid}/wrongNotes/{entryId}": {
+      "schema": { "$ref": "#/entities/WrongNoteDoc" },
+      "description": "Student personal wrong answer note entries subcollection"
+    },
+    "/wrongNoteEntries/{entryId}": {
+      "schema": { "$ref": "#/entities/WrongNoteDoc" },
+      "description": "Student wrong answer note entries document collection"
+    },
+    "/aiUsage/{usageDocId}": {
+      "schema": { "$ref": "#/entities/AiUsageDoc" },
+      "description": "Server-only daily AI quota tracking collection (strictly blocked from all client access)"
     }
   }
 }

@@ -41,6 +41,7 @@ import {
 import { ADVENTURE_STAGES, LEVEL_EXAM_INFO } from '../data/adventureRoadmapData';
 import { CONFUSING_PAIRS } from '../data/confusingPairsData';
 import { HIRAGANA_BASIC, KATAKANA_BASIC } from '../data/kanaData';
+import { TEXTBOOK_BOOK1_CODES } from '../data/textbookCodes';
 import {
   addDaysToKey,
   DEFAULT_KANA_DROP_TIME_LIMITS,
@@ -48,6 +49,7 @@ import {
   formatPraiseText,
   getOverallN1RoadmapPercent,
   getStage0ProgressPercent,
+  getTextbookProgressSummary,
   getTodayKey,
   WRONG_REASON_META
 } from '../lib/storage';
@@ -281,6 +283,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
 
   const stage0Pct = getStage0ProgressPercent(state);
   const overallPct = getOverallN1RoadmapPercent(state);
+  const textbookSummary = getTextbookProgressSummary(state);
   const learnedCount = state.learnedKana.length;
   const gridSource = kanaGridScript === 'hiragana' ? HIRAGANA_BASIC.slice(0, 20) : KATAKANA_BASIC.slice(0, 20);
 
@@ -840,6 +843,16 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                 </div>
                 <div className="h-2.5 rounded-full bg-[#E8E3EF] overflow-hidden">
                   <div className="h-full rounded-full bg-[#2B2340] transition-all" style={{ width: `${Math.max(2, overallPct)}%` }} />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between text-xs font-extrabold text-[#2B2340] mb-1.5">
+                  <span>교재 진도율 (0단계 1권 · Part 1 {textbookSummary.completedPart1}/{textbookSummary.totalPart1}과)</span>
+                  <span className="tabular-nums">{textbookSummary.completedAll}/{textbookSummary.totalAll}과 ({textbookSummary.pctAll}%)</span>
+                </div>
+                <div className="h-2.5 rounded-full bg-[#E9F9F1] overflow-hidden">
+                  <div className="h-full rounded-full bg-[#4CC38A] transition-all" style={{ width: `${Math.max(2, textbookSummary.pctAll)}%` }} />
                 </div>
               </div>
 
@@ -1452,6 +1465,64 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                 </table>
               </div>
             </div>
+
+            {/* Textbook Progress Table (0단계 1권) */}
+            <div className="bg-white border-[3px] border-[#FFE1C2] rounded-[26px] p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-extrabold text-[#2B2340]">
+                    교재 진도 (0단계 1권)
+                  </h2>
+                  <p className="text-xs font-medium text-[#2B2340]/65">
+                    Part 1(H-A ~ H-TEST) {textbookSummary.completedPart1}/{textbookSummary.totalPart1}과 ({textbookSummary.pctPart1}%) · 전체 {textbookSummary.completedAll}/{textbookSummary.totalAll}과 ({textbookSummary.pctAll}%)
+                  </p>
+                </div>
+                <span className="px-3 py-1 rounded-full bg-[#E9F9F1] border border-[#4CC38A] text-xs font-extrabold text-[#1E6E4A] tabular-nums">
+                  교재 완주율 {textbookSummary.pctAll}%
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b-2 border-[#FFE1C2] text-[#2B2340]/65">
+                      <th className="py-2 pr-4">코드</th>
+                      <th className="py-2 pr-4">쪽</th>
+                      <th className="py-2 pr-4">단원</th>
+                      <th className="py-2 pr-4">미션 4종</th>
+                      <th className="py-2">완료 여부 · 날짜</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#FFE1C2]/60 tabular-nums">
+                    {TEXTBOOK_BOOK1_CODES.map((entry) => {
+                      const prog = state.textbookProgress?.[entry.code];
+                      const doneMissions = entry.missions.filter((m) => prog?.missions?.[m.key]).length;
+                      return (
+                        <tr key={entry.code}>
+                          <td className="py-2.5 pr-4 font-num font-extrabold text-[#FF6B57]">{entry.code}</td>
+                          <td className="py-2.5 pr-4 font-num text-[#2B2340]/70">p.{entry.pages}</td>
+                          <td className="py-2.5 pr-4 font-bold text-[#2B2340]">{entry.title}</td>
+                          <td className="py-2.5 pr-4">{doneMissions} / {entry.missions.length}</td>
+                          <td className="py-2.5">
+                            {prog?.completedAt ? (
+                              <span className="px-2.5 py-0.5 rounded-full bg-[#4CC38A]/15 text-[#1E6E4A] text-[11px] font-extrabold">
+                                완료 ({prog.completedAt.slice(0, 10)})
+                              </span>
+                            ) : prog ? (
+                              <span className="px-2.5 py-0.5 rounded-full bg-[#FFF3CC] text-[#7A4F01] text-[11px] font-bold">
+                                진행 중
+                              </span>
+                            ) : (
+                              <span className="text-[#2B2340]/45">미시작</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1666,11 +1737,59 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
 
             {/* Purchased Coupons Redemption List */}
             <div className="bg-white border-[3px] border-[#FFE1C2] rounded-[26px] p-6 space-y-4">
-              <div className="flex items-center gap-2">
-                <Ticket className="w-5 h-5 text-[#FFD166]" />
-                <h2 className="text-lg font-extrabold text-[#2B2340]">
-                  학생이 교환한 쿠폰 · 사용 승인 내역 ({state.purchasedItems.length}건)
-                </h2>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Ticket className="w-5 h-5 text-[#FFD166]" />
+                  <h2 className="text-lg font-extrabold text-[#2B2340]">
+                    학생이 교환한 쿠폰 · 사용 승인 내역 ({state.purchasedItems.length}건)
+                  </h2>
+                </div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FFF7EC] border border-[#FFE1C2] text-xs font-bold text-[#2B2340]">
+                  <span>보유 잔액:</span>
+                  <span className="font-extrabold text-[#FF6B57] tabular-nums">{state.coins.toLocaleString()} C</span>
+                  <span className="text-[#2B2340]/40">·</span>
+                  <span>누적:</span>
+                  <span className="font-extrabold text-[#4CC38A] tabular-nums">{state.exp.toLocaleString()} EXP (Lv.{state.level})</span>
+                </div>
+              </div>
+
+              {/* Student EXP / Activity Audit Trail Box */}
+              <div className="rounded-2xl bg-[#FFFDF9] border-2 border-[#FFE1C2] p-4 space-y-2">
+                <div className="flex items-center justify-between text-xs font-extrabold text-[#2B2340]">
+                  <span>💡 최근 학습 활동 및 EXP/코인 획득 근거 요약</span>
+                  <span className="text-[11px] font-bold text-[#2B2340]/60">
+                    {state.studentName} 학생 (최근 {Object.keys(state.studyLogs).length}일간의 기록)
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1 text-center">
+                  <div className="rounded-xl bg-[#FFF7EC] p-2.5 border border-[#FFE1C2]">
+                    <div className="text-[10px] font-bold text-[#2B2340]/60">완료한 모험 단계</div>
+                    <div className="text-sm font-black text-[#2B2340] tabular-nums mt-0.5">
+                      {state.completedStages.length}개 단계
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-[#FFF7EC] p-2.5 border border-[#FFE1C2]">
+                    <div className="text-[10px] font-bold text-[#2B2340]/60">외운 글자·단어</div>
+                    <div className="text-sm font-black text-[#2B2340] tabular-nums mt-0.5">
+                      {state.learnedKana.length + state.learnedVocab.length}개
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-[#FFF7EC] p-2.5 border border-[#FFE1C2]">
+                    <div className="text-[10px] font-bold text-[#2B2340]/60">모의고사 응시</div>
+                    <div className="text-sm font-black text-[#2B2340] tabular-nums mt-0.5">
+                      {state.mockExamHistory.length}회 응시
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-[#FFF7EC] p-2.5 border border-[#FFE1C2]">
+                    <div className="text-[10px] font-bold text-[#2B2340]/60">가나 낙하 최고 기록</div>
+                    <div className="text-sm font-black text-[#4CC38A] tabular-nums mt-0.5">
+                      {state.gameRecords.kanaDropBest.toLocaleString()}점
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[11px] text-[#2B2340]/65 pt-1">
+                  * 학생이 문제를 맞히거나 미션을 완료할 때만 EXP와 코인이 정산되며, 관리자는 아래 교환 건을 확인한 후 안전하게 사용 완료 처리할 수 있습니다.
+                </p>
               </div>
 
               {state.purchasedItems.length === 0 ? (
@@ -1884,6 +2003,47 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                       }
                       className="w-8 h-8 rounded-full border-2 border-[#FFE1C2] bg-white hover:bg-[#FFF1DF] flex items-center justify-center cursor-pointer"
                       aria-label="게임 EXP 상한 증가"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* 1-B. Textbook Unit Completion Bonus EXP */}
+                <div className="rounded-2xl bg-[#FFFDF9] border-2 border-[#FFE1C2] p-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs sm:text-sm font-extrabold text-[#2B2340]">
+                      교재 완료 보상 EXP (EXP)
+                    </div>
+                    <div className="text-[11px] font-semibold text-[#2B2340]/60">
+                      교재 코드 단원에서 「교재 완료」 버튼을 누를 때 지급하는 EXP (기본 20 EXP)
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onUpdateMissionSettings({
+                          textbookCompletionExp: Math.max(5, (state.missionSettings.textbookCompletionExp ?? 20) - 5)
+                        })
+                      }
+                      className="w-8 h-8 rounded-full border-2 border-[#FFE1C2] bg-white hover:bg-[#FFF1DF] flex items-center justify-center cursor-pointer"
+                      aria-label="교재 보상 EXP 감소"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="w-16 text-center text-xs font-num font-extrabold text-[#FF6B57]">
+                      {state.missionSettings.textbookCompletionExp ?? 20} EXP
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onUpdateMissionSettings({
+                          textbookCompletionExp: Math.min(200, (state.missionSettings.textbookCompletionExp ?? 20) + 5)
+                        })
+                      }
+                      className="w-8 h-8 rounded-full border-2 border-[#FFE1C2] bg-white hover:bg-[#FFF1DF] flex items-center justify-center cursor-pointer"
+                      aria-label="교재 보상 EXP 증가"
                     >
                       <Plus className="w-3.5 h-3.5" />
                     </button>

@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  BookOpen,
   Clock,
   Cloud,
   CloudOff,
@@ -9,6 +10,7 @@ import {
   LogIn,
   LogOut,
   Menu,
+  Sparkles,
   WifiOff,
   X
 } from 'lucide-react';
@@ -33,6 +35,8 @@ interface StudentHeaderProps {
   onGoogleLogout: () => void;
   onOpenProfileModal: () => void;
   onOpenAdminGate: () => void;
+  onApplyTextbookCode: (code: string) => boolean;
+  onOpenAiTeacher?: () => void;
 }
 
 const NAV_ITEMS: { id: MainTab; label: string }[] = [
@@ -61,11 +65,26 @@ export const StudentHeader: React.FC<StudentHeaderProps> = ({
   onGoogleLogin,
   onGoogleLogout,
   onOpenProfileModal,
-  onOpenAdminGate
+  onOpenAdminGate,
+  onApplyTextbookCode,
+  onOpenAiTeacher
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [showIOSGuide, setShowIOSGuide] = React.useState(false);
+  const [codeInput, setCodeInput] = React.useState('');
+  const [mobileCodeBarOpen, setMobileCodeBarOpen] = React.useState(false);
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
+
+  const submitHeaderCode = (e: React.FormEvent, closeDrawer = false) => {
+    e.preventDefault();
+    if (!codeInput.trim()) return;
+    const ok = onApplyTextbookCode(codeInput);
+    if (ok) {
+      setCodeInput('');
+      setMobileCodeBarOpen(false);
+      if (closeDrawer) setMobileMenuOpen(false);
+    }
+  };
 
   return (
     <>
@@ -77,9 +96,6 @@ export const StudentHeader: React.FC<StudentHeaderProps> = ({
             onClick={() => onSelectTab('home')}
             className="flex flex-col sm:flex-row sm:items-baseline sm:gap-1.5 text-left whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-[#FF6B57] rounded-lg px-1"
           >
-            <span className="text-base sm:text-lg font-extrabold tracking-tight text-[#2B2340]">
-              ARI JLPT
-            </span>
             <span className="font-jp text-xs sm:text-sm font-extrabold text-[#FF6B57]">
               アリのにほんご
             </span>
@@ -106,8 +122,47 @@ export const StudentHeader: React.FC<StudentHeaderProps> = ({
             })}
           </nav>
 
-          {/* Zone 3: Offline, Timer, Install, Coins, Student Profile, Sync & Admin */}
+          {/* Zone 3: Textbook Code, Offline, Timer, Install, Coins, Student Profile, Sync & Admin */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Desktop/Tablet Inline Textbook Code Input */}
+            <form
+              onSubmit={(e) => submitHeaderCode(e, false)}
+              className="hidden sm:flex items-center rounded-full border-2 border-[#FFE1C2] bg-[#FFF7EC] pl-2.5 pr-1 py-0.5 focus-within:border-[#FF6B57] transition-colors"
+              aria-label="상단 교재 코드 입력"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-[#FF6B57] shrink-0 mr-1" />
+              <input
+                type="text"
+                value={codeInput}
+                onChange={(e) => setCodeInput(e.target.value)}
+                placeholder="교재 코드"
+                aria-label="교재 코드"
+                maxLength={16}
+                className="w-[70px] xl:w-[88px] bg-transparent text-[11px] font-extrabold text-[#2B2340] placeholder:text-[#2B2340]/45 focus:outline-none uppercase"
+              />
+              <button
+                type="submit"
+                className="px-2 py-1 rounded-full bg-[#FF6B57] hover:bg-[#ef5944] text-white text-[11px] font-extrabold whitespace-nowrap cursor-pointer"
+              >
+                이동
+              </button>
+            </form>
+
+            {/* Mobile Quick Toggle Button for Textbook Code */}
+            <button
+              type="button"
+              onClick={() => setMobileCodeBarOpen((v) => !v)}
+              className={`sm:hidden inline-flex items-center gap-1 px-2 py-1 rounded-full border-2 text-[11px] font-extrabold whitespace-nowrap shrink-0 cursor-pointer ${
+                mobileCodeBarOpen
+                  ? 'bg-[#FF6B57] border-[#FF6B57] text-white'
+                  : 'bg-[#FFF7EC] border-[#FFE1C2] text-[#2B2340]'
+              }`}
+              aria-label="교재 코드 입력 열기"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>코드</span>
+            </button>
+
             {!isOnline ? (
               <span
                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#FFF3CC] border-2 border-[#FFD166] text-[11px] font-extrabold text-[#7A4F01] whitespace-nowrap shrink-0"
@@ -163,6 +218,19 @@ export const StudentHeader: React.FC<StudentHeaderProps> = ({
               >
                 <Download className="w-3.5 h-3.5 text-[#FF6B57]" />
                 <span>홈 화면 추가</span>
+              </button>
+            )}
+
+            {onOpenAiTeacher && (
+              <button
+                type="button"
+                onClick={onOpenAiTeacher}
+                title="AI 일본어 선생님 질문 (하루 30회)"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#FFF1EE] border-2 border-[#FFC2B8] hover:bg-[#FFE0D9] text-xs font-extrabold text-[#FF6B57] whitespace-nowrap shrink-0 cursor-pointer transition-colors shadow-2xs"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-[#FF6B57]" />
+                <span className="hidden sm:inline">AI 질문</span>
+                <span className="sm:hidden">AI</span>
               </button>
             )}
 
@@ -242,9 +310,54 @@ export const StudentHeader: React.FC<StudentHeaderProps> = ({
           </div>
         </div>
 
+        {/* Mobile Quick Slide-Down Textbook Code Input */}
+        {mobileCodeBarOpen && (
+          <form
+            onSubmit={(e) => submitHeaderCode(e, false)}
+            className="sm:hidden border-t border-[#FFE1C2] bg-[#FFFDF9] px-4 py-2.5 flex items-center gap-2"
+          >
+            <BookOpen className="w-4 h-4 text-[#FF6B57] shrink-0" />
+            <input
+              type="text"
+              value={codeInput}
+              onChange={(e) => setCodeInput(e.target.value)}
+              placeholder="교재 코드 입력 (예: H-KA)"
+              maxLength={16}
+              autoFocus
+              className="flex-1 min-w-0 px-3 py-1.5 rounded-full border-2 border-[#FFE1C2] bg-white text-xs font-extrabold text-[#2B2340] focus:outline-none focus:border-[#FF6B57] uppercase"
+            />
+            <button
+              type="submit"
+              className="px-4 py-1.5 rounded-full bg-[#FF6B57] text-white text-xs font-extrabold whitespace-nowrap cursor-pointer"
+            >
+              이동
+            </button>
+          </form>
+        )}
+
         {/* Tablet / Mobile Nav Drawer */}
         {mobileMenuOpen && (
           <div className="lg:hidden border-t border-[#FFE1C2] bg-white px-4 py-3 space-y-2.5">
+            <form
+              onSubmit={(e) => submitHeaderCode(e, true)}
+              className="flex items-center gap-2 pb-2 border-b border-[#FFE1C2]"
+            >
+              <BookOpen className="w-4 h-4 text-[#FF6B57] shrink-0" />
+              <input
+                type="text"
+                value={codeInput}
+                onChange={(e) => setCodeInput(e.target.value)}
+                placeholder="교재 코드 (예: H-KA, HMAP)"
+                maxLength={16}
+                className="flex-1 min-w-0 px-3 py-2 rounded-full border-2 border-[#FFE1C2] bg-[#FFFDF9] text-xs font-extrabold text-[#2B2340] focus:outline-none focus:border-[#FF6B57] uppercase"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-full bg-[#FF6B57] text-white text-xs font-extrabold whitespace-nowrap cursor-pointer"
+              >
+                이동
+              </button>
+            </form>
             <div className="flex flex-wrap gap-2">
               {NAV_ITEMS.map((item) => {
                 const isActive = activeTab === item.id;
@@ -267,6 +380,19 @@ export const StudentHeader: React.FC<StudentHeaderProps> = ({
             </div>
             <div className="pt-2 border-t border-[#FFE1C2] flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
+                {onOpenAiTeacher && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenAiTeacher();
+                      setMobileMenuOpen(false);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FFF1EE] border-2 border-[#FFC2B8] text-xs font-extrabold text-[#FF6B57] cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-[#FF6B57]" />
+                    <span>AI 선생님 질문</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {

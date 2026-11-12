@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { ADVENTURE_STAGES, LEVEL_EXAM_INFO } from '../data/adventureRoadmapData';
 import { BADGE_DEFS } from '../data/cultureAndBadgesData';
+import { TEXTBOOK_BOOK1_CODES } from '../data/textbookCodes';
 import {
   EXP_PER_LEVEL,
   formatPraiseText,
@@ -22,6 +23,7 @@ import {
   getMissionCountSummary,
   getNextJlptDDay,
   getOverallN1RoadmapPercent,
+  getTextbookProgressSummary,
   getTodayKey
 } from '../lib/storage';
 import { AdventureStage, JlptLevel, MainTab, PrintSubTab, StudentState, StudySubTab, SubDifficulty } from '../types';
@@ -36,6 +38,7 @@ interface HomeViewProps {
   onAcknowledgePraise: (praiseId: string, bonusExp: number) => void;
   onTogglePlanTask: (taskKey: string) => void;
   onResumeLastLocation: () => void;
+  onApplyTextbookCode: (code: string) => boolean;
   onNotify: (msg: string, type?: 'info' | 'success' | 'warning') => void;
 }
 
@@ -51,9 +54,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onAcknowledgePraise,
   onTogglePlanTask,
   onResumeLastLocation,
+  onApplyTextbookCode,
   onNotify
 }) => {
   const [modalMode, setModalMode] = React.useState<'exam' | 'roadmap' | null>(null);
+  const [textbookCodeInput, setTextbookCodeInput] = React.useState('');
 
   const expInLevel = state.exp % EXP_PER_LEVEL;
   const remainingExp = EXP_PER_LEVEL - expInLevel;
@@ -64,6 +69,21 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const missionSummary = getMissionCountSummary(state);
   const dueSrsCount = getDueSrsChars(state).length;
   const overallPct = getOverallN1RoadmapPercent(state);
+  const textbookSummary = getTextbookProgressSummary(state);
+
+  const quickTextbookCodes = React.useMemo(() => {
+    const unlocked = TEXTBOOK_BOOK1_CODES.filter((entry) =>
+      state.unlockedStages.includes(entry.requiredStageId)
+    );
+    const nextPending = unlocked.find(
+      (entry) => entry.part === 'PART1' && !state.textbookProgress?.[entry.code]?.completedAt
+    );
+    const list = [TEXTBOOK_BOOK1_CODES[0], TEXTBOOK_BOOK1_CODES[1]];
+    if (nextPending && !list.some((item) => item.code === nextPending.code)) {
+      list.push(nextPending);
+    }
+    return list;
+  }, [state.unlockedStages, state.textbookProgress]);
 
   const unreadPraise = state.praiseMessages.find((m) => !state.acknowledgedPraiseIds.includes(m.id));
 
@@ -219,6 +239,80 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </button>
         </div>
       )}
+
+      {/* Prominent Textbook Code Input Card (A4 0단계 1권 연동) */}
+      <section className="bg-white border-[3px] border-[#FF6B57]/75 rounded-[24px] p-5 shadow-xs flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div className="space-y-1.5 min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FFF7EC] border border-[#FFE1C2] text-[11px] font-extrabold text-[#FF6B57]">
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>0단계 1권 · A4 교재 코드</span>
+            </span>
+            <span className="text-xs font-extrabold text-[#2B2340]/70 tabular-nums">
+              Part 1 완료 {textbookSummary.completedPart1}/{textbookSummary.totalPart1}과 ({textbookSummary.pctPart1}%)
+            </span>
+          </div>
+          <h2 className="text-base sm:text-lg font-extrabold text-[#2B2340]">
+            교재 오른쪽 아래 QR 옆 코드를 입력해 보세요
+          </h2>
+          <p className="text-xs font-medium text-[#2B2340]/70">
+            예: H-MAP, H-A, H-KA (소문자나 공백이 섞여도 자동으로 찾아 열어요)
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            {quickTextbookCodes.map((entry) => {
+              const isDone = Boolean(state.textbookProgress?.[entry.code]?.completedAt);
+              return (
+                <button
+                  key={entry.code}
+                  type="button"
+                  onClick={() => onApplyTextbookCode(entry.code)}
+                  className={`px-2.5 py-1 rounded-full border text-[11px] font-extrabold cursor-pointer transition-colors ${
+                    isDone
+                      ? 'bg-[#E9F9F1] border-[#4CC38A] text-[#1E6E4A]'
+                      : 'bg-[#FFF7EC] border-[#FFE1C2] hover:border-[#FF6B57] text-[#2B2340]'
+                  }`}
+                >
+                  {entry.code} · {entry.title} (p.{entry.pages})
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => onNavigateTab('records')}
+              className="px-2.5 py-1 rounded-full text-[11px] font-bold text-[#FF6B57] hover:underline cursor-pointer"
+            >
+              전체 진도표 보기 →
+            </button>
+          </div>
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!textbookCodeInput.trim()) return;
+            if (onApplyTextbookCode(textbookCodeInput)) {
+              setTextbookCodeInput('');
+            }
+          }}
+          className="flex items-center gap-2 w-full lg:w-auto lg:min-w-[300px]"
+        >
+          <input
+            type="text"
+            value={textbookCodeInput}
+            onChange={(e) => setTextbookCodeInput(e.target.value)}
+            placeholder="교재 코드 (예: H-KA)"
+            maxLength={16}
+            aria-label="교재 코드 입력"
+            className="flex-1 min-w-0 px-4 py-2.5 rounded-full border-2 border-[#FFE1C2] bg-[#FFFDF9] text-sm font-extrabold text-[#2B2340] placeholder:text-[#2B2340]/45 focus:outline-none focus:border-[#FF6B57] uppercase"
+          />
+          <button
+            type="submit"
+            className="px-5 py-2.5 rounded-full bg-[#FF6B57] hover:bg-[#ef5944] text-white text-sm font-extrabold whitespace-nowrap cursor-pointer shadow-xs transition-colors"
+          >
+            바로 이동
+          </button>
+        </form>
+      </section>
 
       {/* Main 2-Column Dashboard Grid matching Screenshot 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

@@ -261,5 +261,14 @@ export const BADGE_DEFS: BadgeDef[] = [
     conditionText: 'N5 월드 해금 또는 목표 급수 N5+ 도전',
     accentColor: 'navy',
     targetTab: 'home'
+  },
+  {
+    id: 'badge_textbook_part1',
+    title: '히라가나 교재 완주',
+    shortLabel: '1권',
+    description: '0단계 1권 Part 1(H-A ~ H-TEST) 교재를 모두 완료했어요!',
+    conditionText: '교재 코드 H-A ~ H-TEST 전체 완료',
+    accentColor: 'coral',
+    targetTab: 'records'
   }
 ];

@@ -57,6 +57,8 @@ interface LearningLabViewProps {
   initialVocabId?: string;
   initialKanjiId?: string;
   initialGrammarId?: string;
+  openQuizNonce?: number;
+  openQuizMode?: 'row' | 'hiragana_review';
   onChangeSubTab: (tab: StudySubTab) => void;
   onSelectRow: (rowId: string) => void;
   onMarkKanaLearned: (char: string) => void;
@@ -70,6 +72,7 @@ interface LearningLabViewProps {
   onCompleteStageQuiz: (stageId: string, scorePercent: number, correctCount: number, totalCount: number) => void;
   onCompleteSrsSession: (reviewedCount: number) => void;
   onCompleteSpeakingMission: () => void;
+  onTextbookWritingComplete?: () => void;
   onOpenPrintForPair: (pairId: string, subTab: PrintSubTab) => void;
   onChangeLevelScope: (lvl: JlptLevel, sub: SubDifficulty) => void;
   onToggleVocabLearned: (id: string) => void;
@@ -285,6 +288,8 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
   initialVocabId,
   initialKanjiId,
   initialGrammarId,
+  openQuizNonce,
+  openQuizMode,
   onChangeSubTab,
   onSelectRow,
   onMarkKanaLearned,
@@ -293,6 +298,7 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
   onCompleteStageQuiz,
   onCompleteSrsSession,
   onCompleteSpeakingMission,
+  onTextbookWritingComplete,
   onOpenPrintForPair,
   onChangeLevelScope,
   onToggleVocabLearned,
@@ -417,6 +423,9 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
   };
 
   const handlePointerUp = () => {
+    if (isDrawing && hasDrawn) {
+      onTextbookWritingComplete?.();
+    }
     setIsDrawing(false);
   };
 
@@ -480,6 +489,7 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
   // Stage Quiz (80%+ to unlock next stage & win Culture Card)
   const [quizState, setQuizState] = React.useState<{
     active: boolean;
+    mode: 'row' | 'hiragana_review';
     questions: { target: KanaItem; options: KanaItem[] }[];
     index: number;
     correct: number;
@@ -500,32 +510,76 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
     );
   }, [selectedRowId]);
 
-  const startStageQuiz = () => {
-    const pool = rowItems.length >= 3 ? rowItems : HIRAGANA_BASIC.slice(0, 10);
-    const distractorPool = (pool[0]?.script === 'katakana' ? KATAKANA_BASIC : HIRAGANA_BASIC);
-    const questionItems = shuffleArray(pool).slice(0, Math.min(5, pool.length));
-    // Repeat to make 5 questions when row has 3 items (like や행)
-    while (questionItems.length < 5) {
-      questionItems.push(pool[questionItems.length % pool.length]);
+  const startStageQuiz = React.useCallback(
+    (mode: 'row' | 'hiragana_review' = 'row') => {
+      if (mode === 'hiragana_review') {
+        const allHiraPool = [...HIRAGANA_BASIC, ...HIRAGANA_DAKUON, ...HIRAGANA_YOON];
+        const pickedBasic = shuffleArray(HIRAGANA_BASIC).slice(0, 3);
+        const pickedDaku = shuffleArray(HIRAGANA_DAKUON).slice(0, 2);
+        const pickedYoon = shuffleArray(HIRAGANA_YOON).slice(0, 1);
+        const questionItems = shuffleArray([...pickedBasic, ...pickedDaku, ...pickedYoon]);
+        const questions = questionItems.map((target) => {
+          const sameCategory = allHiraPool.filter(
+            (d) => d.char !== target.char && d.category === target.category
+          );
+          const others = shuffleArray(
+            sameCategory.length >= 3 ? sameCategory : HIRAGANA_BASIC.filter((d) => d.char !== target.char)
+          ).slice(0, 3);
+          return {
+            target,
+            options: shuffleArray([target, ...others])
+          };
+        });
+        setQuizState({
+          active: true,
+          mode: 'hiragana_review',
+          questions,
+          index: 0,
+          correct: 0,
+          answeredChar: null,
+          finished: false,
+          wrongNoteId: null
+        });
+        speakJapanese(questions[0].target.char);
+        return;
+      }
+
+      const pool = rowItems.length >= 3 ? rowItems : HIRAGANA_BASIC.slice(0, 10);
+      const distractorPool = pool[0]?.script === 'katakana' ? KATAKANA_BASIC : HIRAGANA_BASIC;
+      const questionItems = shuffleArray(pool).slice(0, Math.min(5, pool.length));
+      // Repeat to make 5 questions when row has 3 items (like や행)
+      while (questionItems.length < 5) {
+        questionItems.push(pool[questionItems.length % pool.length]);
+      }
+      const questions = questionItems.map((target) => {
+        const others = shuffleArray(distractorPool.filter((d) => d.char !== target.char)).slice(0, 3);
+        return {
+          target,
+          options: shuffleArray([target, ...others])
+        };
+      });
+      setQuizState({
+        active: true,
+        mode: 'row',
+        questions,
+        index: 0,
+        correct: 0,
+        answeredChar: null,
+        finished: false,
+        wrongNoteId: null
+      });
+      speakJapanese(questions[0].target.char);
+    },
+    [rowItems]
+  );
+
+  const lastHandledQuizNonceRef = React.useRef(0);
+  React.useEffect(() => {
+    if (openQuizNonce && openQuizNonce > 0 && openQuizNonce !== lastHandledQuizNonceRef.current) {
+      lastHandledQuizNonceRef.current = openQuizNonce;
+      startStageQuiz(openQuizMode || 'row');
     }
-    const questions = questionItems.map((target) => {
-      const others = shuffleArray(distractorPool.filter((d) => d.char !== target.char)).slice(0, 3);
-      return {
-        target,
-        options: shuffleArray([target, ...others])
-      };
-    });
-    setQuizState({
-      active: true,
-      questions,
-      index: 0,
-      correct: 0,
-      answeredChar: null,
-      finished: false,
-      wrongNoteId: null
-    });
-    speakJapanese(questions[0].target.char);
-  };
+  }, [openQuizNonce, openQuizMode, startStageQuiz]);
 
   const advanceStageQuiz = React.useCallback(
     (nextCorrectCount: number) => {
@@ -1007,7 +1061,7 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
 
                       <button
                         type="button"
-                        onClick={startStageQuiz}
+                        onClick={() => startStageQuiz('row')}
                         className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-[#FF6B57]/12 hover:bg-[#FF6B57]/20 text-[#FF6B57] text-xs font-extrabold cursor-pointer"
                       >
                         <Sparkles className="w-4 h-4" />
@@ -1069,6 +1123,7 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
                         onClick={() => {
                           playSfx('correct');
                           onMarkKanaLearned(activeKana.char);
+                          onTextbookWritingComplete?.();
                           clearCanvas();
                           onNotify(`${activeKana.char} 쓰기 연습 완료! (+15 EXP)`, 'success');
                         }}
@@ -1084,10 +1139,16 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
                     <div className="flex items-center justify-between gap-2">
                       <div>
                         <h3 className="text-base font-extrabold text-[#2B2340]">
-                          {matchingStage ? `「${matchingStage.title}」 단계 퀴즈` : '단계 확인 퀴즈'}
+                          {quizState?.mode === 'hiragana_review'
+                            ? '히라가나 전체 복습 테스트 (H-TEST)'
+                            : matchingStage
+                              ? `「${matchingStage.title}」 단계 퀴즈`
+                              : '단계 확인 퀴즈'}
                         </h3>
                         <p className="text-xs text-[#2B2340]/65">
-                          5문제 중 4개(80%) 이상 맞히면 다음 단계가 열리고 문화 카드를 받아요!
+                          {quizState?.mode === 'hiragana_review'
+                            ? '청음·탁음·반탁음·요음을 모두 복습하고 80% 이상 맞히면 완료돼요!'
+                            : '5문제 중 4개(80%) 이상 맞히면 다음 단계가 열리고 문화 카드를 받아요!'}
                         </p>
                       </div>
                       <Award className="w-6 h-6 text-[#FFD166] shrink-0" />
@@ -1096,7 +1157,7 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
                     {!quizState ? (
                       <button
                         type="button"
-                        onClick={startStageQuiz}
+                        onClick={() => startStageQuiz('row')}
                         className="w-full py-3 rounded-2xl bg-[#FF6B57] hover:bg-[#ef5944] text-white text-sm font-extrabold cursor-pointer"
                       >
                         단계 정복 퀴즈 시작하기
@@ -1121,7 +1182,7 @@ export const LearningLabView: React.FC<LearningLabViewProps> = ({
                               </div>
                               <button
                                 type="button"
-                                onClick={startStageQuiz}
+                                onClick={() => startStageQuiz(quizState.mode)}
                                 className="px-5 py-2 rounded-full bg-[#2B2340] text-white text-xs font-bold cursor-pointer"
                               >
                                 다시 풀기
